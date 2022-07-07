@@ -68,7 +68,3 @@ If you want to avoid such error, you can directly call the function ``bilateral_
 ```
 depth_map, surface, wu_map, wv_map = bilateral_normal_integration(normal_map, mask, k=2, K=None, max_iter=100, tol=1e-5)
 ```
-
-We have to only provide the RGB color-coded normal maps due to the size limitation of supplementary files.
-The results in the main paper are all integrated from indiscrete normal maps and do not suffer from such discretization errors.
-The normal vectors are not discretized (though the integration domain is a discrete pixel domain).
