@@ -4,8 +4,8 @@
 
 ECCV 2022
 
-This is the official Python implementation of the ECCV 2022 work "Bilateral Normal Integration".
-This work aims at discontinuity preservation surface reconstruction from a single surface normal map.
+This is the official Python implementation of the ECCV 2022 work "Bilateral Normal Integration."
+This work aims at **discontinuity preservation** surface reconstruction from a single surface normal map.
 The proposed method works in both orthographic and perspective cases, is robust to outliers, and only has one hyperparameter in the objective function.
 
 ## Dependencies
