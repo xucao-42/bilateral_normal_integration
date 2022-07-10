@@ -13,7 +13,6 @@ Our implementation was tested using Python 3.7 and depends on `Numpy` and `Scipy
 You can ensure the four packages are installed in your python environment by running:
 
  ```
- # cd to the `code` folder first
 pip install -r requirements.txt
  ```
 
