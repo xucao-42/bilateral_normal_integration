@@ -132,111 +132,137 @@ def sigmoid(x, k=1):
     return 1 / (1 + np.exp(-k * x))
 
 
-def bilateral_normal_integration(normal_map, mask, k=1, K=None, step_size=1, max_iter=100, tol=1e-5, cg_max_iter=500, cg_tol=1e-5):
-        # To avoid confusion, we list the coordinate systems in this code as follows
-        #
-        # pixel coordinates         camera coordinates     normal coordinates (the main paper's Fig. 1 (a))
-        # u                          x                              y
-        # |                          |  z                           |
-        # |                          | /                            o -- x
-        # |                          |/                            /
-        # o --- v                    o --- y                      z
-        # (bottom left)
-        #                       (o is the optical center;
-        #                        xy-plane is parallel to the image plane;
-        #                        +z is the viewing direction.)
-        #
-        # The input normal map should be defined in the normal coordinates.
-        # The camera matrix K should be defined in the camera coordinates.
-        # K = [[fx, 0,  cx],
-        #      [0,  fy, cy],
-        #      [0,  0,  1]]
+def bilateral_normal_integration(normal_map,
+                                 normal_mask,
+                                 k=2,
+                                 lambda1=0,
+                                 depth_map=None,
+                                 depth_mask=None,
+                                 K=None,
+                                 step_size=1,
+                                 max_iter=100,
+                                 tol=1e-5,
+                                 cg_max_iter=500,
+                                 cg_tol=1e-5):
+    # To avoid confusion, we list the coordinate systems in this code as follows
+    #
+    # pixel coordinates         camera coordinates     normal coordinates (the main paper's Fig. 1 (a))
+    # u                          x                              y
+    # |                          |  z                           |
+    # |                          | /                            o -- x
+    # |                          |/                            /
+    # o --- v                    o --- y                      z
+    # (bottom left)
+    #                       (o is the optical center;
+    #                        xy-plane is parallel to the image plane;
+    #                        +z is the viewing direction.)
+    #
+    # The input normal map should be defined in the normal coordinates.
+    # The camera matrix K should be defined in the camera coordinates.
+    # K = [[fx, 0,  cx],
+    #      [0,  fy, cy],
+    #      [0,  0,  1]]
 
-        projection = "orthographic" if K is None else "perspective"
-        print(f"Running bilateral normal integration with k={k} in the {projection} case. \n"
-              f"The number of normal vectors is {np.sum(mask)}.")
-        # transfer the normal map from the normal coordinates to the camera coordinates
-        nx = normal_map[mask, 1]
-        ny = normal_map[mask, 0]
-        nz = - normal_map[mask, 2]
+    projection = "orthographic" if K is None else "perspective"
+    print(f"Running bilateral normal integration with k={k} in the {projection} case. \n"
+          f"The number of normal vectors is {np.sum(normal_mask)}.")
+    # transfer the normal map from the normal coordinates to the camera coordinates
+    nx = normal_map[normal_mask, 1]
+    ny = normal_map[normal_mask, 0]
+    nz = - normal_map[normal_mask, 2]
 
-        if K is not None:  # perspective
-            H, W = mask.shape
+    if K is not None:  # perspective
+        H, W = normal_mask.shape
 
-            yy, xx = np.meshgrid(range(W), range(H))
-            xx = np.flip(xx, axis=0)
+        yy, xx = np.meshgrid(range(W), range(H))
+        xx = np.flip(xx, axis=0)
 
-            cx = K[0, 2]
-            cy = K[1, 2]
-            fx = K[0, 0]
-            fy = K[1, 1]
+        cx = K[0, 2]
+        cy = K[1, 2]
+        fx = K[0, 0]
+        fy = K[1, 1]
 
-            uu = xx[mask] - cx
-            vv = yy[mask] - cy
+        uu = xx[normal_mask] - cx
+        vv = yy[normal_mask] - cy
 
-            Nz_u = diags(uu * nx + vv * ny + fx * nz)
-            Nz_v = diags(uu * nx + vv * ny + fy * nz)
+        Nz_u = diags(uu * nx + vv * ny + fx * nz)
+        Nz_v = diags(uu * nx + vv * ny + fy * nz)
 
+    else:  # orthographic
+        Nz_u = diags(nz)
+        Nz_v = diags(nz)
+
+    # get partial derivative matrices
+    Dvp, Dvn, Dup, Dun = generate_dx_dy(normal_mask, step_size)
+
+    A1 = Nz_u @ Dup
+    A2 = Nz_u @ Dun
+    A3 = Nz_v @ Dvp
+    A4 = Nz_v @ Dvn
+
+    A = vstack((A1, A2, A3, A4))
+    b = np.concatenate((-nx, -nx, -ny, -ny))
+
+    # initialization
+    W = 0.5 * diags(np.ones_like(b))
+    z = np.zeros(np.sum(normal_mask))
+    energy = (A @ z - b).T @ W @ (A @ z - b)
+
+    tic = time.time()
+
+    energy_list = []
+    if depth_map is not None:
+        m = depth_mask[normal_mask].astype(int)  # shape: (num_normals,)
+        M = diags(m)
+        if K is not None: # perspective
+            z_prior = np.log(depth_map)[normal_mask]  # shape: (num_normals,)
         else:  # orthographic
-            Nz_u = diags(nz)
-            Nz_v = diags(nz)
+            z_prior = depth_map[normal_mask]
 
-        # get partial derivative matrices
-        Dvp, Dvn, Dup, Dun = generate_dx_dy(mask, step_size)
-
-        A1 = Nz_u @ Dup
-        A2 = Nz_u @ Dun
-        A3 = Nz_v @ Dvp
-        A4 = Nz_v @ Dvn
-
-        A = vstack((A1, A2, A3, A4))
-        b = np.concatenate((-nx, -nx, -ny, -ny))
-
-        # initialization
-        W = 0.5 * diags(np.ones_like(b))
-        z = np.zeros(np.sum(mask))
-        energy = (A @ z - b).T @ W @ (A @ z - b)
-
-        tic = time.time()
-
-        energy_list = []
-        for i in range(max_iter):
+    for i in range(max_iter):
+        if depth_map is not None:
+            temp = M @ (z_prior - z)
+            temp[temp==0] = np.nan
+            offset = np.nanmean(temp)
+            z = z + offset
+            z, _ = cg(A.T @ W @ A + lambda1 * M, A.T @ W @ b + lambda1 * M @ z_prior, x0=z, maxiter=cg_max_iter, tol=cg_tol)
+        else:
             z, _ = cg(A.T @ W @ A, A.T @ W @ b, x0=z, maxiter=cg_max_iter, tol=cg_tol)
-            # update weights
-            wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
-            wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
-            W = diags(np.concatenate((wu, 1-wu, wv, 1-wv)))
+        # update weights
+        wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
+        wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
+        W = diags(np.concatenate((wu, 1-wu, wv, 1-wv)))
 
-            energy_old = energy
-            energy = (A @ z - b).T @ W @ (A @ z - b)
-            energy_list.append(energy)
-            relative_energy = np.abs(energy - energy_old) / energy_old
-            print(f"step {i+1}/{max_iter} energy: {energy}")
-            if relative_energy < tol:
-                break
-        toc = time.time()
+        energy_old = energy
+        energy = (A @ z - b).T @ W @ (A @ z - b)
+        energy_list.append(energy)
+        relative_energy = np.abs(energy - energy_old) / energy_old
+        print(f"step {i+1}/{max_iter} energy: {energy} relative energy: {relative_energy:.3e}")
+        if relative_energy < tol:
+            break
+    toc = time.time()
 
-        print(f"Total time: {toc - tic}")
-        depth_map = np.ones_like(mask, float) * np.nan
-        depth_map[mask] = z
+    print(f"Total time: {toc - tic}")
+    depth_map = np.ones_like(normal_mask, float) * np.nan
+    depth_map[normal_mask] = z
 
-        if K is not None:  # perspective
-            depth_map = np.exp(depth_map)
-            vertices = map_depth_map_to_point_clouds(depth_map, mask, K=K)
-        else:  # orthographic
-            vertices = map_depth_map_to_point_clouds(depth_map, mask, K=None, step_size=step_size)
+    if K is not None:  # perspective
+        depth_map = np.exp(depth_map)
+        vertices = map_depth_map_to_point_clouds(depth_map, normal_mask, K=K)
+    else:  # orthographic
+        vertices = map_depth_map_to_point_clouds(depth_map, normal_mask, K=None, step_size=step_size)
 
-        facets = construct_facets_from(mask)
-        surface = pv.PolyData(vertices, facets)
+    facets = construct_facets_from(normal_mask)
+    surface = pv.PolyData(vertices, facets)
 
-        # In the main paper, wu indicates the horizontal direction; wv indicates the vertical direction
-        wu_map = np.ones_like(mask) * np.nan
-        wu_map[mask] = wv
+    # In the main paper, wu indicates the horizontal direction; wv indicates the vertical direction
+    wu_map = np.ones_like(normal_mask) * np.nan
+    wu_map[normal_mask] = wv
 
-        wv_map = np.ones_like(mask) * np.nan
-        wv_map[mask] = wu
+    wv_map = np.ones_like(normal_mask) * np.nan
+    wv_map[normal_mask] = wu
 
-        return depth_map, surface, wu_map, wv_map, energy_list
+    return depth_map, surface, wu_map, wv_map, energy_list
 
 
 if __name__ == '__main__':
