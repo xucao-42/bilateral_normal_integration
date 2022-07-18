@@ -296,9 +296,19 @@ if __name__ == '__main__':
 
     if os.path.exists(os.path.join(arg.path, "K.txt")):
         K =np.loadtxt(os.path.join(arg.path, "K.txt"))
-        depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map, mask, k=arg.k, K=K, max_iter=arg.iter, tol=arg.tol)
+        depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map=normal_map,
+                                                                                       normal_mask=mask,
+                                                                                       k=arg.k,
+                                                                                       K=K,
+                                                                                       max_iter=arg.iter,
+                                                                                       tol=arg.tol)
     else:
-        depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map, mask, k=arg.k, K=None, max_iter=arg.iter, tol=arg.tol)
+        depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map=normal_map,
+                                                                                       normal_mask=mask,
+                                                                                       k=arg.k,
+                                                                                       K=None,
+                                                                                       max_iter=arg.iter,
+                                                                                       tol=arg.tol)
 
     # save the resultant polygon mesh and discontinuity maps.
     np.save(os.path.join(arg.path, "energy"), np.array(energy_list))
