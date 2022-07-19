@@ -214,16 +214,13 @@ def bilateral_normal_integration(normal_map,
     if depth_map is not None:
         m = depth_mask[normal_mask].astype(int)  # shape: (num_normals,)
         M = diags(m)
-        if K is not None: # perspective
-            z_prior = np.log(depth_map)[normal_mask]  # shape: (num_normals,)
-        else:  # orthographic
-            z_prior = depth_map[normal_mask]
+        z_prior = np.log(depth_map)[normal_mask] if K is not None else depth_map[normal_mask] # shape: (num_normals,)
 
     for i in range(max_iter):
         if depth_map is not None:
-            temp = M @ (z_prior - z)
-            temp[temp==0] = np.nan
-            offset = np.nanmean(temp)
+            depth_diff = M @ (z_prior - z)
+            depth_diff[depth_diff==0] = np.nan
+            offset = np.nanmean(depth_diff)
             z = z + offset
             z, _ = cg(A.T @ W @ A + lambda1 * M, A.T @ W @ b + lambda1 * M @ z_prior, x0=z, maxiter=cg_max_iter, tol=cg_tol)
         else:
@@ -320,23 +317,3 @@ if __name__ == '__main__':
     cv2.imwrite(os.path.join(arg.path, f"wu_k_{arg.k}.png"), wu_map)
     cv2.imwrite(os.path.join(arg.path, f"wv_k_{arg.k}.png"), wv_map)
     print(f"saved {arg.path}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
