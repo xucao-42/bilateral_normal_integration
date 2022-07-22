@@ -1,3 +1,10 @@
+"""
+Bilateral Normal Integration (BiNI)
+"""
+__author__ = "Xu Cao <cao.xu@ist.osaka-u.ac.jp>"
+__copyright__ = "Copyright (C) 2022 Xu Cao"
+__version__ = "2.0"
+
 from scipy.sparse import diags, coo_matrix, vstack
 from scipy.sparse.linalg import cg
 import numpy as np
@@ -226,7 +233,7 @@ def bilateral_normal_integration(normal_map,
             z, _ = cg(A.T @ W @ A + lambda1 * M, A.T @ W @ b + lambda1 * M @ z_prior, x0=z, maxiter=cg_max_iter, tol=cg_tol)
         else:
             z, _ = cg(A.T @ W @ A, A.T @ W @ b, x0=z, maxiter=cg_max_iter, tol=cg_tol)
-        
+
         # update weights
         wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
         wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
