@@ -1,12 +1,19 @@
-# Bilateral Normal Integration
+# [Bilateral Normal Integration](https://drive.google.com/file/d/17eB96Yr40wouCacoLMpQdfXgQ5PEDgkT/view?usp=sharing)
 
 [Xu Cao](https://hoshino042.github.io/homepage/), [Hiroaki Santo](https://sites.google.com/view/hiroaki-santo/), [Boxin Shi](http://alumni.media.mit.edu/~shiboxin/), [Fumio Okura](http://cvl.ist.osaka-u.ac.jp/user/okura/) and [Yasuyuki Matsushita](http://www-infobiz.ist.osaka-u.ac.jp/en/member/matsushita/)
 
 ECCV 2022
 
-This is the official Python implementation of the ECCV 2022 work "Bilateral Normal Integration."
+This is the official Python implementation of the ECCV 2022 work "Bilateral Normal Integration" (BiNI). 
 This work aims at **discontinuity preserving** surface reconstruction from a single surface normal map.
-The proposed method works in both orthographic and perspective cases, is robust to outliers, and only has one hyperparameter in the objective function.
+The proposed variational method works in both orthographic and perspective cases, is robust to outliers, and only has one hyperparameter in the objective function.
+
+## Results
+From left to right in the following, we show reconstruction results from the real-world normal maps estimated by [CNN-PS](https://github.com/satoshi-ikehata/CNN-PS-ECCV2018), [deep polarization 3D imaging](https://wp.doc.ic.ac.uk/rgi/project/deep-polarization-3d-imaging/), and [ICON](https://icon.is.tue.mpg.de), respectively.
+![](teaser/teaser1.png)
+
+Our method works in the perspective case. The following perspective normal maps are from DiLiGenT dataset.
+![](teaser/teaser2.png)
 
 ## Dependencies
 Our implementation was tested using Python 3.7 and depends on `Numpy` and `Scipy` for numerical computation, `PyVista` for mesh IO, and `OpenCV` for image IO.
@@ -22,7 +29,7 @@ Each normal map and its mask are put in a distinct folder.
 For the normal map in the perspective case, its folder contains an extra `K.txt` recording the 3x3 camera intrinsic matrix.
 Our code determines the perspective or orthographic case based on whether or not there is a `K.txt` in the normal map's folder.
 
-To obtain the integrated surface of a specific normal map, pass the normal map's folder path to the script `bilateral_normal_integration.py`.
+To obtain the integrated surface  of a specific normal map, pass the normal map's folder path to the script `bilateral_normal_integration.py`.
 For example, 
 ```
 python bilateral_normal_integration.py --path data/Fig4_reading
@@ -37,18 +44,20 @@ python bilateral_normal_integration.py --path data/supp_vase -k 4 --iter 100 --t
 In our experiments, `tol` is consistently set as 1e-5.
 For `k` and `iter`, we used the following setups:
 
-|  surfaces                     | k | iter|
-| ---- | ---- | ---- |
-| Fig. 1 the thinker            | 2 | 100 |
-| Fig. 4 stripes                | 2 | 100 |
-| Fig. 4 reading                | 2 | 100 |
-| Fig. 5 plant                  | 2 | 150 |
-| Fig. 6 bunny                  | 2 | 100 |
-| Fig. 7 all DiLiGenT objects   | 2 | 100 |
-| Fig. 8 left                   | 4 | 100 |
-| Fig. 8 right                  | 2 | 300 |
-| supp vase                     | 4 | 100 |
-| supp tent                     | 1 | 100 |
+| surfaces                    | k   | iter |
+|-----------------------------|-----|------|
+| Fig. 1 the thinker          | 2   | 100  |
+| Fig. 4 stripes              | 2   | 100  |
+| Fig. 4 reading              | 2   | 100  |
+| Fig. 5 plant                | 2   | 150  |
+| Fig. 5 owl                  | 2   | 100  |
+| Fig. 5 human                | 2   | 100  |
+| Fig. 6 bunny                | 2   | 100  |
+| Fig. 7 all DiLiGenT objects | 2   | 100  |
+| supp vase                   | 4   | 100  |
+| supp tent                   | 1   | 100  |
+| supp limitation2            | 4   | 100  |
+| supp limitation3            | 2   | 300  |
 
 
 ## Run on your normal maps
