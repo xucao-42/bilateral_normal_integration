@@ -135,9 +135,9 @@ def sigmoid(x, k=1):
 def bilateral_normal_integration(normal_map,
                                  normal_mask,
                                  k=2,
-                                 lambda1=0,
                                  depth_map=None,
                                  depth_mask=None,
+                                 lambda1=0,
                                  K=None,
                                  step_size=1,
                                  max_iter=100,
@@ -212,9 +212,9 @@ def bilateral_normal_integration(normal_map,
 
     energy_list = []
     if depth_map is not None:
-        m = depth_mask[normal_mask].astype(int)  # shape: (num_normals,)
+        m = depth_mask[normal_mask].astype(int)
         M = diags(m)
-        z_prior = np.log(depth_map)[normal_mask] if K is not None else depth_map[normal_mask] # shape: (num_normals,)
+        z_prior = np.log(depth_map)[normal_mask] if K is not None else depth_map[normal_mask]
 
     for i in range(max_iter):
         if depth_map is not None:
