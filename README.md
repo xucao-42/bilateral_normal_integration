@@ -12,7 +12,7 @@ The proposed variational method works in both orthographic and perspective cases
 From left to right in the following, we show reconstruction results from the real-world normal maps estimated by [CNN-PS](https://github.com/satoshi-ikehata/CNN-PS-ECCV2018), [deep polarization 3D imaging](https://wp.doc.ic.ac.uk/rgi/project/deep-polarization-3d-imaging/), and [ICON](https://icon.is.tue.mpg.de), respectively.
 ![](teaser/teaser1.png)
 
-Our method works in the perspective case. The following perspective normal maps are from DiLiGenT dataset.
+Our method works in the perspective case. The following perspective normal maps are from [DiLiGenT](https://sites.google.com/site/photometricstereodata/single?authuser=0) dataset.
 ![](teaser/teaser2.png)
 
 ## Dependencies
