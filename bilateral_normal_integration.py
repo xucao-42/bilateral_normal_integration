@@ -217,6 +217,7 @@ def bilateral_normal_integration(normal_map,
         z_prior = np.log(depth_map)[normal_mask] if K is not None else depth_map[normal_mask]
 
     for i in range(max_iter):
+        # fix weights and solve for depths
         if depth_map is not None:
             depth_diff = M @ (z_prior - z)
             depth_diff[depth_diff==0] = np.nan
@@ -225,11 +226,13 @@ def bilateral_normal_integration(normal_map,
             z, _ = cg(A.T @ W @ A + lambda1 * M, A.T @ W @ b + lambda1 * M @ z_prior, x0=z, maxiter=cg_max_iter, tol=cg_tol)
         else:
             z, _ = cg(A.T @ W @ A, A.T @ W @ b, x0=z, maxiter=cg_max_iter, tol=cg_tol)
+        
         # update weights
         wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
         wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
         W = diags(np.concatenate((wu, 1-wu, wv, 1-wv)))
 
+        # compute energy to judge whether terminate the iteration
         energy_old = energy
         energy = (A @ z - b).T @ W @ (A @ z - b)
         energy_list.append(energy)
