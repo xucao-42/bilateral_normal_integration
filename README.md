@@ -5,15 +5,25 @@
 ECCV 2022
 
 This is the official Python implementation of the ECCV 2022 work "Bilateral Normal Integration" (BiNI). 
-This work aims at **discontinuity preserving** surface reconstruction from a single surface normal map.
-The proposed variational method works in both orthographic and perspective cases, is robust to outliers, and only has one hyperparameter in the objective function.
+We propose a variational approach for **discontinuity preserving** surface reconstruction from a surface normal map.
+Our method can handle both orthographic and perspective projection, is robust to outliers, and only has one hyperparameter in the objective function.
 
-## Results
+## Reconstruction results
+### Classical toy normal maps
+The left one is "tent," and the right one is "vase."
+![](teaser/toy.gif)
+
+### Synthetic normal maps
+Normal maps rendered by Mitsuba 0.6. The left one is rendered by an orthographic camera, and the right two are by a perspective camera.
+![](teaser/synthetic.gif)
+
+### Real-world normal maps
 From left to right in the following, we show reconstruction results from the real-world normal maps estimated by [CNN-PS](https://github.com/satoshi-ikehata/CNN-PS-ECCV2018), [deep polarization 3D imaging](https://wp.doc.ic.ac.uk/rgi/project/deep-polarization-3d-imaging/), and [ICON](https://icon.is.tue.mpg.de), respectively.
-![](teaser/teaser1.png)
+![](teaser/real.gif)
 
-Our method works in the perspective case. The following perspective normal maps are from [DiLiGenT](https://sites.google.com/site/photometricstereodata/single?authuser=0) dataset.
-![](teaser/teaser2.png)
+### DiLiGenT normal maps
+The following perspective normal maps are from [DiLiGenT](https://sites.google.com/site/photometricstereodata/single?authuser=0) dataset.
+![](teaser/diligent2.gif)
 
 ## Dependencies
 Our implementation was tested using Python 3.7 and depends on `Numpy` and `Scipy` for numerical computation, `PyVista` for mesh IO, and `OpenCV` for image IO.
@@ -76,6 +86,11 @@ If you want to avoid such error, you can directly call the function ``bilateral_
 ```
 depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map, mask, k=2, K=None, max_iter=100, tol=1e-5)
 ```
+The key hyperparameter here is the small `k`. It controls how easily the discontinuity can be preserved.
+The larger `k` is, discontinuities are easier to be preserved.
+However, a very large `k` may introduce artifacts around discontinuities and over-segment the surface,
+while a tiny `k` can result in smooth surfaces.
+We recommend set `k=2` initially, and tune it depending on your results.
 
 ## Depth normal fusion
 Our ECCV paper does not discribe how to use the information from a prior depth map if it is available.

@@ -239,7 +239,7 @@ def bilateral_normal_integration(normal_map,
         wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
         W = diags(np.concatenate((wu, 1-wu, wv, 1-wv)))
 
-        # compute energy to judge whether terminate the iteration
+        # compute energy to judge whether the iteration should be terminated
         energy_old = energy
         energy = (A @ z - b).T @ W @ (A @ z - b)
         energy_list.append(energy)
