@@ -11,19 +11,27 @@ Our method can handle both orthographic and perspective projection, is robust to
 ## Reconstruction results
 ### Classical toy normal maps
 The left one is "tent," and the right one is "vase."
-![](teaser/toy.gif)
+<p align="center">
+    <img src='teaser/toy.gif'>
+</p>
 
 ### Synthetic normal maps
 Normal maps rendered by Mitsuba 0.6. The left one is rendered by an orthographic camera, and the right two are by a perspective camera.
-![](teaser/synthetic.gif)
+<p align="center">
+    <img src='teaser/synthetic.gif'>
+</p>
 
 ### Real-world normal maps
 From left to right in the following, we show reconstruction results from the real-world normal maps estimated by [CNN-PS](https://github.com/satoshi-ikehata/CNN-PS-ECCV2018), [deep polarization 3D imaging](https://wp.doc.ic.ac.uk/rgi/project/deep-polarization-3d-imaging/), and [ICON](https://icon.is.tue.mpg.de), respectively.
-![](teaser/real.gif)
+<p align="center">
+    <img src='teaser/real.gif'>
+</p>
 
 ### DiLiGenT normal maps
 The following perspective normal maps are from [DiLiGenT](https://sites.google.com/site/photometricstereodata/single?authuser=0) dataset.
-![](teaser/diligent2.gif)
+<p align="center">
+    <img src='teaser/diligent2.gif'>
+</p>
 
 ## Dependencies
 Our implementation was tested using Python 3.7 and depends on `Numpy` and `Scipy` for numerical computation, `PyVista` for mesh IO, and `OpenCV` for image IO.
