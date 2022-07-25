@@ -9,28 +9,44 @@ We propose a variational approach for **discontinuity preserving** surface recon
 Our method can handle both orthographic and perspective projection, is robust to outliers, and only has one hyperparameter in the objective function.
 
 ## Reconstruction results
-### Classical toy normal maps
+### Toy normal maps
 The left one is "tent," and the right one is "vase."
 <p align="center">
-    <img src='teaser/toy.gif'>
+   <img src='teaser/tent.png' height="130">  
+   <img class="animated-gif" src='teaser/tent.gif' height="130" width="196">
+   <img src='teaser/vase.png' height="130">
+   <img class="animated-gif" src='teaser/vase.gif' height="130" width="164">
 </p>
 
 ### Synthetic normal maps
 Normal maps rendered by Mitsuba 0.6. The left one is rendered by an orthographic camera, and the right two are by a perspective camera.
 <p align="center">
-    <img src='teaser/synthetic.gif'>
+   <img src='teaser/reading.png' height="150">
+   <img class="animated-gif" src='teaser/reading.gif' height="150" width="147">
+   <img src='teaser/thinker.png' height="150">  
+   <img class="animated-gif" src='teaser/thinker.gif' height="150" width="70">
+   <img src='teaser/bunny.png' height="150">
+   <img class="animated-gif" src='teaser/bunny.gif' height="150" width="128">
 </p>
 
 ### Real-world normal maps
 From left to right in the following, we show reconstruction results from the real-world normal maps estimated by [CNN-PS](https://github.com/satoshi-ikehata/CNN-PS-ECCV2018), [deep polarization 3D imaging](https://wp.doc.ic.ac.uk/rgi/project/deep-polarization-3d-imaging/), and [ICON](https://icon.is.tue.mpg.de), respectively.
 <p align="center">
-    <img src='teaser/real.gif'>
+    <img src='teaser/plant.jpeg' height="110">
+    <img class="animated-gif" src='teaser/plant.gif' height="110" width="127">
+    <img src='teaser/owl.jpeg' height="110">
+    <img class="animated-gif" src='teaser/owl.gif' height="110" width="128">
+    <img src='teaser/human.png' height="110">
+    <img class="animated-gif" src='teaser/human.gif' height="110" width="108">
 </p>
 
 ### DiLiGenT normal maps
 The following perspective normal maps are from [DiLiGenT](https://sites.google.com/site/photometricstereodata/single?authuser=0) dataset.
 <p align="center">
-    <img src='teaser/diligent2.gif'>
+    <img src='teaser/harvest.png' height="130">
+    <img class="animated-gif" src='teaser/harvest.gif' height="130" width="210">
+    <img src='teaser/pot2.png' height="130">  
+    <img class="animated-gif" src='teaser/pot2.gif' height="130" width="147">
 </p>
 
 ## Dependencies
