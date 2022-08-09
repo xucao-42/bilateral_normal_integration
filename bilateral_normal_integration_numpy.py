@@ -102,11 +102,11 @@ def construct_facets_from(mask):
     facet_bottom_left_mask = move_bottom(facet_top_left_mask)
     facet_bottom_right_mask = move_bottom_right(facet_top_left_mask)
 
-    return np.hstack((4 * np.ones((np.sum(facet_top_left_mask), 1)),
-               idx[facet_top_left_mask][:, None],
-               idx[facet_bottom_left_mask][:, None],
-               idx[facet_bottom_right_mask][:, None],
-               idx[facet_top_right_mask][:, None])).astype(int)
+    return np.stack((4 * np.ones(np.sum(facet_top_left_mask)),
+               idx[facet_top_left_mask],
+               idx[facet_bottom_left_mask],
+               idx[facet_bottom_right_mask],
+               idx[facet_top_right_mask]), axis=-1).astype(int)
 
 
 def map_depth_map_to_point_clouds(depth_map, mask, K=None, step_size=1):
@@ -264,6 +264,8 @@ def bilateral_normal_integration(normal_map,
         vertices = map_depth_map_to_point_clouds(depth_map, normal_mask, K=None, step_size=step_size)
 
     facets = construct_facets_from(normal_mask)
+    if normal_map[:, :, -1].mean() < 0:
+        facets = facets[:, [0, 1, 4, 3, 2]]
     surface = pv.PolyData(vertices, facets)
 
     # In the main paper, wu indicates the horizontal direction; wv indicates the vertical direction
@@ -294,7 +296,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--path', type=dir_path)
     parser.add_argument('-k', type=float, default=2)
     parser.add_argument('-i', '--iter', type=np.uint, default=100)
-    parser.add_argument('-t', '--tol', type=float, default=1e-4)
+    parser.add_argument('-t', '--tol', type=float, default=1e-5)
     arg = parser.parse_args()
 
     normal_map = cv2.cvtColor(cv2.imread(os.path.join(arg.path, "normal_map.png"), cv2.IMREAD_UNCHANGED), cv2.COLOR_RGB2BGR)

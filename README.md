@@ -75,7 +75,7 @@ python bilateral_normal_integration_numpy.py --path data/Fig4_reading
 ```
 This script will save the integrated surface and discontinuity maps in the same folder.
 The default parameter setting is `k=2` (the sigmoid function's sharpness), `iter=100` (the maximum iteration number of IRLS), 
-and `tol=1e-4` (the stopping tolerance of IRLS).
+and `tol=1e-5` (the stopping tolerance of IRLS).
 You can change the parameter settings by running, for example, 
 ```
 python bilateral_normal_integration_numpy.py --path data/supp_vase -k 4 --iter 100 --tol 1e-5
