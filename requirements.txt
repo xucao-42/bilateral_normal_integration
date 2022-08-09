@@ -2,3 +2,4 @@ numpy == 1.20.2
 scipy == 1.6.2
 pyvista == 0.31.3
 opencv-python == 4.5.1.48
+tqdm

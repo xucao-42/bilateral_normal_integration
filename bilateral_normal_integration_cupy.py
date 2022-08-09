@@ -1,7 +1,7 @@
 """
 Bilateral Normal Integration (BiNI)
 """
-__author__ = "Xu Cao <cao.xu@ist.osaka-u.ac.jp>; Yuliang Xiu <yuliang.xiu@tue.mpg.de >"
+__author__ = "Xu Cao <cao.xu@ist.osaka-u.ac.jp>; Yuliang Xiu <yuliang.xiu@tue.mpg.de>"
 __copyright__ = "Copyright (C) 2022 Xu Cao; Yuliang Xiu"
 __version__ = "2.0"
 

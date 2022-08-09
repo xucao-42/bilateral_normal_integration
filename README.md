@@ -53,14 +53,14 @@ The following perspective normal maps are from [DiLiGenT](https://sites.google.c
 </p>
 
 ## Dependencies
-Our implementation was tested using Python 3.7 and depends on `Numpy` and `Scipy` for numerical computation, `PyVista` for mesh IO, and `OpenCV` for image IO.
-You can ensure the four packages are installed in your python environment by running:
+Our implementation was tested using Python 3.7 and mainly depends on `Numpy` and `Scipy` for numerical computation, `PyVista` for mesh IO, and `OpenCV` for image IO.
+You can ensure the required packages are installed in your python environment by running:
 
  ```
 pip install -r requirements.txt
  ```
 
-If you want to use the CuPy version on GPU, following [the official guides](https://docs.cupy.dev/en/stable/install.html) to install CuPy.
+If you want to use the CuPy version on GPU, following [the official guide](https://docs.cupy.dev/en/stable/install.html) to install CuPy.
 
 ## Reproduce our results 
 The `data` folder contains all surfaces we used in the paper.
