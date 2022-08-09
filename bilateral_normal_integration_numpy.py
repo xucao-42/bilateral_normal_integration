@@ -8,6 +8,7 @@ __version__ = "2.0"
 from scipy.sparse import diags, coo_matrix, vstack
 from scipy.sparse.linalg import cg
 import numpy as np
+from tqdm.auto import tqdm
 import time
 import pyvista as pv
 
@@ -223,7 +224,9 @@ def bilateral_normal_integration(normal_map,
         M = diags(m)
         z_prior = np.log(depth_map)[normal_mask] if K is not None else depth_map[normal_mask]
 
-    for i in range(max_iter):
+    pbar = tqdm(range(max_iter))
+
+    for i in pbar:
         # fix weights and solve for depths
         if depth_map is not None:
             depth_diff = M @ (z_prior - z)
@@ -244,7 +247,8 @@ def bilateral_normal_integration(normal_map,
         energy = (A @ z - b).T @ W @ (A @ z - b)
         energy_list.append(energy)
         relative_energy = np.abs(energy - energy_old) / energy_old
-        print(f"step {i+1}/{max_iter} energy: {energy} relative energy: {relative_energy:.3e}")
+        pbar.set_description(
+            f"step {i + 1}/{max_iter} energy: {energy:.3f} relative energy: {relative_energy:.3e}")
         if relative_energy < tol:
             break
     toc = time.time()
@@ -290,7 +294,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--path', type=dir_path)
     parser.add_argument('-k', type=float, default=2)
     parser.add_argument('-i', '--iter', type=np.uint, default=100)
-    parser.add_argument('-t', '--tol', type=float, default=1e-5)
+    parser.add_argument('-t', '--tol', type=float, default=1e-4)
     arg = parser.parse_args()
 
     normal_map = cv2.cvtColor(cv2.imread(os.path.join(arg.path, "normal_map.png"), cv2.IMREAD_UNCHANGED), cv2.COLOR_RGB2BGR)

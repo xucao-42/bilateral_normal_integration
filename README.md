@@ -8,6 +8,9 @@ This is the official Python implementation of the ECCV 2022 work "Bilateral Norm
 We propose a variational approach for **discontinuity preserving** surface reconstruction from a surface normal map.
 Our method can handle both orthographic and perspective projection, is robust to outliers, and only has one hyperparameter in the objective function.
 
+## Update
+**2022-08-09**: A CuPy version written by [Yuliang Xiu](https://xiuyuliang.cn) is available now. It can run on NVIDIA graphics cards and is much more efficient especially when the normal map's dimension becomes huge. The usage is the same as the numpy version.
+
 ## Reconstruction results
 ### Toy normal maps
 The left one is "tent," and the right one is "vase."
@@ -57,23 +60,25 @@ You can ensure the four packages are installed in your python environment by run
 pip install -r requirements.txt
  ```
 
+If you want to use the CuPy version on GPU, following [the official guides](https://docs.cupy.dev/en/stable/install.html) to install CuPy.
+
 ## Reproduce our results 
 The `data` folder contains all surfaces we used in the paper.
 Each normal map and its mask are put in a distinct folder.
 For the normal map in the perspective case, its folder contains an extra `K.txt` recording the 3x3 camera intrinsic matrix.
 Our code determines the perspective or orthographic case based on whether or not there is a `K.txt` in the normal map's folder.
 
-To obtain the integrated surface  of a specific normal map, pass the normal map's folder path to the script `bilateral_normal_integration.py`.
+To obtain the integrated surface  of a specific normal map, pass the normal map's folder path to the script `bilateral_normal_integration_numpy.py`.
 For example, 
 ```
-python bilateral_normal_integration.py --path data/Fig4_reading
+python bilateral_normal_integration_numpy.py --path data/Fig4_reading
 ```
 This script will save the integrated surface and discontinuity maps in the same folder.
 The default parameter setting is `k=2` (the sigmoid function's sharpness), `iter=100` (the maximum iteration number of IRLS), 
-and `tol=1e-5` (the stopping tolerance of IRLS).
+and `tol=1e-4` (the stopping tolerance of IRLS).
 You can change the parameter settings by running, for example, 
 ```
-python bilateral_normal_integration.py --path data/supp_vase -k 4 --iter 100 --tol 1e-5
+python bilateral_normal_integration_numpy.py --path data/supp_vase -k 4 --iter 100 --tol 1e-5
 ```
 In our experiments, `tol` is consistently set as 1e-5.
 For `k` and `iter`, we used the following setups:
@@ -130,7 +135,8 @@ depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(n
                                                                                lambda1=1e-4,
                                                                                K=None)
 ```
-The depth mask here need not be identical to the normal mask. That is, the prior depth map can be either sparse or dense,
+Here, the normal map, normal mask, depth map, and the depth mask should be of the same dimension.
+But the foreground of the depth mask need not be identical to the normal mask. That is, the prior depth map can be either sparse or dense,
 depending on your application.
 The refined depth map will have the same domain as the normal map.
 A new hyperparameter lambda1 is introduced to control the effect of the prior depth map.
