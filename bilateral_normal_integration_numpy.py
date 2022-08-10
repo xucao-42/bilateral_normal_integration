@@ -233,9 +233,13 @@ def bilateral_normal_integration(normal_map,
             depth_diff[depth_diff==0] = np.nan
             offset = np.nanmean(depth_diff)
             z = z + offset
-            z, _ = cg(A.T @ W @ A + lambda1 * M, A.T @ W @ b + lambda1 * M @ z_prior, x0=z, maxiter=cg_max_iter, tol=cg_tol)
+            A_mat = A.T @ W @ A + lambda1 * M
+            b_vec = A.T @ W @ b + lambda1 * M @ z_prior
         else:
-            z, _ = cg(A.T @ W @ A, A.T @ W @ b, x0=z, maxiter=cg_max_iter, tol=cg_tol)
+            A_mat = A.T @ W @ A
+            b_vec = A.T @ W @ b
+
+        z, _ = cg(A_mat, b_vec, x0=z, maxiter=cg_max_iter, tol=cg_tol)
 
         # update weights
         wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)

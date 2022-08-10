@@ -141,7 +141,7 @@ def map_depth_map_to_point_clouds(depth_map, mask, K=None, step_size=1):
         u[..., 1] = yy
         u[..., 2] = 1
         u = u[mask].T  # 3 x m
-        vertices = (cp.linalg.inv(K) @ u).T * \
+        vertices = (cp.linalg.inv(cp.asarray(K)) @ u).T * \
             depth_map[mask, cp.newaxis]  # m x 3
 
     return vertices
@@ -200,7 +200,7 @@ def bilateral_normal_integration(normal_map,
     if K is not None:  # perspective
         H, W = normal_mask.shape
 
-        yy, xx = cp.meshgrid(range(W), range(H))
+        yy, xx = cp.meshgrid(cp.arange(W), cp.arange(H))
         xx = cp.flip(xx, axis=0)
 
         cx = K[0, 2]
@@ -252,11 +252,14 @@ def bilateral_normal_integration(normal_map,
             offset = cp.nanmean(depth_diff)
             z = z + offset
             A_mat = A.T @ W @ A + lambda1 * M
-            b_mat = A.T @ W @ b + lambda1 * M @ z_prior
-            z, _ = cg(A_mat, b_mat, x0=z, maxiter=cg_max_iter, tol=cg_tol)
+            b_vec = A.T @ W @ b + lambda1 * M @ z_prior
+
         else:
-            z, _ = cg(A.T @ W @ A, A.T @ W @ b, x0=z,
-                      maxiter=cg_max_iter, tol=cg_tol)
+            A_mat = A.T @ W @ A
+            b_vec = A.T @ W @ b
+
+        z, _ = cg(A_mat, b_vec, x0=z, maxiter=cg_max_iter, tol=cg_tol)
+
         # update weights
         wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
         wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
