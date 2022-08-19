@@ -339,13 +339,13 @@ def bilateral_normal_integration(normal_map,
         relative_energy = cp.abs(energy - energy_old) / energy_old
         pbar.set_description(
             f"step {i + 1}/{max_iter} energy: {energy:.3e}"
-            f" relative energy: {relative_energy:.3f}")
+            f" relative energy: {relative_energy:.3e}")
         if relative_energy < tol:
             break
     del A1, A2, A3, A4, nx, ny
     toc = time.time()
 
-    print(f"Total time: {toc - tic:.3e} sec")
+    print(f"Total time: {toc - tic:.3f} sec")
     depth_map = cp.ones_like(normal_mask, float) * cp.nan
     depth_map[normal_mask] = z
 
