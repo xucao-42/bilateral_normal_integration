@@ -322,7 +322,7 @@ def bilateral_normal_integration(normal_map,
             offset = cp.mean((z_prior - z)[depth_mask_flat])
             z = z + offset
 
-        z, flag = cg(A_mat, b_vec, x0=z, M=D, maxiter=cg_max_iter, tol=cg_tol)
+        z, _ = cg(A_mat, b_vec, x0=z, M=D, maxiter=cg_max_iter, tol=cg_tol)
         del A_mat, b_vec, wu, wv
 
         # update weights
@@ -338,8 +338,8 @@ def bilateral_normal_integration(normal_map,
         energy_list.append(energy)
         relative_energy = cp.abs(energy - energy_old) / energy_old
         pbar.set_description(
-            f"step {i + 1}/{max_iter} flag:{flag} energy: {energy:.3e}"
-            f" relative energy: {relative_energy:.3e}")
+            f"step {i + 1}/{max_iter} energy: {energy:.3e}"
+            f" relative energy: {relative_energy:.3f}")
         if relative_energy < tol:
             break
     del A1, A2, A3, A4, nx, ny

@@ -256,7 +256,7 @@ def bilateral_normal_integration(normal_map,
             break
     toc = time.time()
 
-    print(f"Total time: {toc - tic}")
+    print(f"Total time: {toc - tic:.3f} sec")
     depth_map = np.ones_like(normal_mask, float) * np.nan
     depth_map[normal_mask] = z
 
