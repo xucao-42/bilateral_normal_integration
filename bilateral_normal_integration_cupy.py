@@ -8,10 +8,13 @@ __version__ = "2.0"
 import pyvista as pv
 import cupy as cp
 import numpy as np
-from cupyx.scipy.sparse import diags, coo_matrix, vstack
+from cupyx.scipy.sparse import csr_matrix
 from cupyx.scipy.sparse.linalg import cg
 from tqdm.auto import tqdm
 import time
+
+pool = cp.cuda.MemoryPool(cp.cuda.malloc_managed)
+cp.cuda.set_allocator(pool.malloc)
 
 
 def move_left(mask):
@@ -46,58 +49,49 @@ def move_bottom_right(mask):
     return cp.pad(mask, ((1, 0), (1, 0)), "constant", constant_values=0)[:-1, :-1]
 
 
-def generate_dx_dy(mask, step_size=1):
+def generate_dx_dy(mask, nz_horizontal, nz_vertical, step_size=1):
     # pixel coordinates
     # ^ vertical positive
     # |
     # |
     # |
     # o ---> horizontal positive
+    num_pixel = cp.sum(mask)
 
     pixel_idx = cp.zeros_like(mask, dtype=int)
-    pixel_idx[mask] = cp.arange(cp.sum(mask))
-    num_pixel = cp.sum(mask)
+    pixel_idx[mask] = cp.arange(num_pixel)
 
     has_left_mask = cp.logical_and(move_right(mask), mask)
     has_right_mask = cp.logical_and(move_left(mask), mask)
     has_bottom_mask = cp.logical_and(move_top(mask), mask)
     has_top_mask = cp.logical_and(move_bottom(mask), mask)
 
-    data_term = cp.array([-1] * int(cp.sum(has_left_mask)) + [1] * int(cp.sum(has_left_mask))).astype(cp.float32)
-    
-    # only the pixels having left neighbors have [-1, 1] in that row
-    row_idx = pixel_idx[has_left_mask]
-    row_idx = cp.tile(row_idx, 2)
-    col_idx = cp.concatenate(
-        (pixel_idx[move_left(has_left_mask)], pixel_idx[has_left_mask]))
-    D_horizontal_neg = coo_matrix(
-        (data_term, (row_idx, col_idx)), shape=(num_pixel, num_pixel))
+    nz_left = nz_horizontal[has_left_mask[mask]]
+    nz_right = nz_horizontal[has_right_mask[mask]]
+    nz_top = nz_vertical[has_top_mask[mask]]
+    nz_bottom = nz_vertical[has_bottom_mask[mask]]
 
-    data_term = cp.array([-1] * int(cp.sum(has_right_mask)) + [1] * int(cp.sum(has_right_mask))).astype(cp.float32)
-    row_idx = pixel_idx[has_right_mask]
-    row_idx = cp.tile(row_idx, 2)
-    col_idx = cp.concatenate(
-        (pixel_idx[has_right_mask], pixel_idx[move_right(has_right_mask)]))
-    D_horizontal_pos = coo_matrix(
-        (data_term, (row_idx, col_idx)), shape=(num_pixel, num_pixel))
+    data = cp.stack([-nz_left/step_size, nz_left/step_size], -1).flatten()
+    indices = cp.stack((pixel_idx[move_left(has_left_mask)], pixel_idx[has_left_mask]), -1).flatten()
+    indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_left_mask[mask].astype(int) * 2)])
+    D_horizontal_neg = csr_matrix((data, indices, indptr), shape=(num_pixel, num_pixel))
 
-    data_term = cp.array([-1] * int(cp.sum(has_top_mask)) + [1] * int(cp.sum(has_top_mask))).astype(cp.float32)
-    row_idx = pixel_idx[has_top_mask]
-    row_idx = cp.tile(row_idx, 2)
-    col_idx = cp.concatenate(
-        (pixel_idx[has_top_mask], pixel_idx[move_top(has_top_mask)]))
-    D_vertical_pos = coo_matrix(
-        (data_term, (row_idx, col_idx)), shape=(num_pixel, num_pixel))
+    data = cp.stack([-nz_right/step_size, nz_right/step_size], -1).flatten()
+    indices = cp.stack((pixel_idx[has_right_mask], pixel_idx[move_right(has_right_mask)]), -1).flatten()
+    indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_right_mask[mask].astype(int) * 2)])
+    D_horizontal_pos = csr_matrix((data, indices, indptr), shape=(num_pixel, num_pixel))
 
-    data_term = cp.array([-1] * int(cp.sum(has_bottom_mask)) + [1] * int(cp.sum(has_bottom_mask))).astype(cp.float32)
-    row_idx = pixel_idx[has_bottom_mask]
-    row_idx = cp.tile(row_idx, 2)
-    col_idx = cp.concatenate(
-        (pixel_idx[move_bottom(has_bottom_mask)], pixel_idx[has_bottom_mask]))
-    D_vertical_neg = coo_matrix(
-        (data_term, (row_idx, col_idx)), shape=(num_pixel, num_pixel))
+    data = cp.stack([-nz_top/step_size, nz_top/step_size], -1).flatten()
+    indices = cp.stack((pixel_idx[has_top_mask], pixel_idx[move_top(has_top_mask)]), -1).flatten()
+    indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_top_mask[mask].astype(int) * 2)])
+    D_vertical_pos = csr_matrix((data, indices, indptr), shape=(num_pixel, num_pixel))
 
-    return D_horizontal_pos / step_size, D_horizontal_neg / step_size, D_vertical_pos / step_size, D_vertical_neg / step_size
+    data = cp.stack([-nz_bottom/step_size, nz_bottom/step_size], -1).flatten()
+    indices = cp.stack((pixel_idx[move_bottom(has_bottom_mask)], pixel_idx[has_bottom_mask]), -1).flatten()
+    indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_bottom_mask[mask].astype(int) * 2)])
+    D_vertical_neg = csr_matrix((data, indices, indptr), shape=(num_pixel, num_pixel))
+
+    return D_horizontal_pos, D_horizontal_neg, D_vertical_pos, D_vertical_neg
 
 
 def construct_facets_from(mask):
@@ -159,10 +153,10 @@ def bilateral_normal_integration(normal_map,
                                  depth_mask=None,
                                  K=None,
                                  step_size=1,
-                                 max_iter=100,
+                                 max_iter=150,
                                  tol=1e-4,
-                                 cg_max_iter=500,
-                                 cg_tol=1e-5):
+                                 cg_max_iter=5000,
+                                 cg_tol=1e-3):
 
     # To avoid confusion, we list the coordinate systems in this code as follows
     #
@@ -189,13 +183,15 @@ def bilateral_normal_integration(normal_map,
         depth_map = cp.asarray(depth_map)
         depth_mask = cp.asarray(depth_mask)
 
+    num_normals = cp.sum(normal_mask).item()
     projection = "orthographic" if K is None else "perspective"
     print(f"Running bilateral normal integration with k={k} in the {projection} case. \n"
-          f"The number of normal vectors is {cp.sum(normal_mask)}.")
+          f"The number of normal vectors is {num_normals}.")
     # transfer the normal map from the normal coordinates to the camera coordinates
     nx = normal_map[normal_mask, 1]
     ny = normal_map[normal_mask, 0]
     nz = - normal_map[normal_mask, 2]
+    del normal_map
 
     if K is not None:  # perspective
         H, W = normal_mask.shape
@@ -211,71 +207,145 @@ def bilateral_normal_integration(normal_map,
         uu = xx[normal_mask] - cx
         vv = yy[normal_mask] - cy
 
-        Nz_u = diags(uu * nx + vv * ny + fx * nz)
-        Nz_v = diags(uu * nx + vv * ny + fy * nz)
-
+        nz_u = uu * nx + vv * ny + fx * nz
+        nz_v = uu * nx + vv * ny + fy * nz
+        del xx, yy, uu, vv
     else:  # orthographic
-        Nz_u = diags(nz)
-        Nz_v = diags(nz)
+        nz_u = nz.copy()
+        nz_v = nz.copy()
 
-    # get partial derivative matrices
-    Dvp, Dvn, Dup, Dun = generate_dx_dy(normal_mask, step_size)
+    # right, left, top, bottom
+    A3, A4, A1, A2 = generate_dx_dy(normal_mask, nz_horizontal=nz_v, nz_vertical=nz_u, step_size=step_size)
 
-    A1 = Nz_u @ Dup
-    A2 = Nz_u @ Dun
-    A3 = Nz_v @ Dvp
-    A4 = Nz_v @ Dvn
+    pixel_idx = cp.zeros_like(normal_mask, dtype=int)
+    pixel_idx[normal_mask] = cp.arange(num_normals)
+    pixel_idx_flat = cp.arange(num_normals)
+    pixel_idx_flat_indptr = cp.arange(num_normals + 1)
 
-    A = vstack((A1, A2, A3, A4))
-    b = cp.concatenate((-nx, -nx, -ny, -ny))
+    has_left_mask = cp.logical_and(move_right(normal_mask), normal_mask)
+    has_left_mask_left = move_left(has_left_mask)
+    has_right_mask = cp.logical_and(move_left(normal_mask), normal_mask)
+    has_right_mask_right = move_right(has_right_mask)
+    has_bottom_mask = cp.logical_and(move_top(normal_mask), normal_mask)
+    has_bottom_mask_bottom = move_bottom(has_bottom_mask)
+    has_top_mask = cp.logical_and(move_bottom(normal_mask), normal_mask)
+    has_top_mask_top = move_top(has_top_mask)
+
+    has_left_mask_flat = has_left_mask[normal_mask]
+    has_right_mask_flat = has_right_mask[normal_mask]
+    has_bottom_mask_flat = has_bottom_mask[normal_mask]
+    has_top_mask_flat = has_top_mask[normal_mask]
+
+    has_left_mask_left_flat = has_left_mask_left[normal_mask]
+    has_right_mask_right_flat = has_right_mask_right[normal_mask]
+    has_bottom_mask_bottom_flat = has_bottom_mask_bottom[normal_mask]
+    has_top_mask_top_flat = has_top_mask_top[normal_mask]
+
+    nz_left_square = nz_v[has_left_mask_flat] ** 2
+    nz_right_square = nz_v[has_right_mask_flat] ** 2
+    nz_top_square = nz_u[has_top_mask_flat] ** 2
+    nz_bottom_square = nz_u[has_bottom_mask_flat] ** 2
+
+    pixel_idx_left_center = pixel_idx[has_left_mask]
+    pixel_idx_right_right = pixel_idx[has_right_mask_right]
+    pixel_idx_top_center = pixel_idx[has_top_mask]
+    pixel_idx_bottom_bottom = pixel_idx[has_bottom_mask_bottom]
+
+    pixel_idx_left_left_indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_left_mask_left_flat)])
+    pixel_idx_right_center_indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_right_mask_flat)])
+    pixel_idx_top_top_indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_top_mask_top_flat)])
+    pixel_idx_bottom_center_indptr = cp.concatenate([cp.array([0]), cp.cumsum(has_bottom_mask_flat)])
 
     # initialization
-    W = 0.5 * diags(cp.ones_like(b))
-    z = cp.zeros(cp.sum(normal_mask).item())
-    energy = (A @ z - b).T @ W @ (A @ z - b)
+    wu = 0.5 * cp.ones(num_normals, float)
+    wv = 0.5 * cp.ones(num_normals, float)
+    z = cp.zeros(num_normals, float)
+    energy = cp.sum(wu * (A1.dot(z) + nx) ** 2) + \
+             cp.sum((1 - wu) * (A2.dot(z) + nx) ** 2) + \
+             cp.sum(wv * (A3.dot(z) + ny) ** 2) + \
+             cp.sum((1 - wv) * (A4.dot(z) + ny) ** 2)
+    energy_list = []
 
     tic = time.time()
 
     energy_list = []
 
     if depth_map is not None:
-        m = depth_mask[normal_mask].astype(int)  # shape: (num_normals,)
-        M = diags(m)
+        depth_mask_flat = depth_mask[normal_mask].astype(bool)  # shape: (num_normals,)
         z_prior = cp.log(depth_map)[normal_mask] if K is not None else depth_map[normal_mask]  # shape: (num_normals,)
+        z_prior[~depth_mask_flat] = 0
 
     pbar = tqdm(range(max_iter))
 
     for i in pbar:
+        data_term_top = wu[has_top_mask_flat] * nz_top_square
+        data_term_bottom = (1 - wu[has_bottom_mask_flat]) * nz_bottom_square
+        data_term_left = (1 - wv[has_left_mask_flat]) * nz_left_square
+        data_term_right = wv[has_right_mask_flat] * nz_right_square
+
+        diagonal_data_term = cp.zeros(num_normals)
+        diagonal_data_term[has_left_mask_flat] += data_term_left
+        diagonal_data_term[has_left_mask_left_flat] += data_term_left
+        diagonal_data_term[has_right_mask_flat] += data_term_right
+        diagonal_data_term[has_right_mask_right_flat] += data_term_right
+        diagonal_data_term[has_top_mask_flat] += data_term_top
+        diagonal_data_term[has_top_mask_top_flat] += data_term_top
+        diagonal_data_term[has_bottom_mask_flat] += data_term_bottom
+        diagonal_data_term[has_bottom_mask_bottom_flat] += data_term_bottom
         if depth_map is not None:
-            depth_diff = M @ (z_prior - z)
-            depth_diff[depth_diff == 0] = cp.nan
-            offset = cp.nanmean(depth_diff)
+            diagonal_data_term[depth_mask_flat] += lambda1
+
+        A_mat_d = csr_matrix((diagonal_data_term, pixel_idx_flat, pixel_idx_flat_indptr),
+                             shape=(num_normals, num_normals))
+
+        A_mat_left_odu = csr_matrix((-data_term_left, pixel_idx_left_center, pixel_idx_left_left_indptr),
+                                    shape=(num_normals, num_normals))
+        A_mat_right_odu = csr_matrix((-data_term_right, pixel_idx_right_right, pixel_idx_right_center_indptr),
+                                     shape=(num_normals, num_normals))
+        A_mat_top_odu = csr_matrix((-data_term_top, pixel_idx_top_center, pixel_idx_top_top_indptr),
+                                   shape=(num_normals, num_normals))
+        A_mat_bottom_odu = csr_matrix((-data_term_bottom, pixel_idx_bottom_bottom, pixel_idx_bottom_center_indptr),
+                                      shape=(num_normals, num_normals))
+
+        A_mat_odu = A_mat_top_odu + A_mat_bottom_odu + A_mat_right_odu + A_mat_left_odu
+        A_mat = A_mat_d + A_mat_odu + A_mat_odu.T
+
+        D = csr_matrix((1 / cp.clip(diagonal_data_term, 1e-5, None), pixel_idx_flat, pixel_idx_flat_indptr),
+                       shape=(num_normals, num_normals))  # Jacobi preconditioner.
+        b_vec = A1.T @ (wu * (-nx)) \
+                + A2.T @ ((1 - wu) * (-nx)) \
+                + A3.T @ (wv * (-ny)) \
+                + A4.T @ ((1 - wv) * (-ny))
+
+        if depth_map is not None:
+            b_vec += lambda1 * z_prior
+            offset = cp.mean((z_prior - z)[depth_mask_flat])
             z = z + offset
-            A_mat = A.T @ W @ A + lambda1 * M
-            b_vec = A.T @ W @ b + lambda1 * M @ z_prior
 
-        else:
-            A_mat = A.T @ W @ A
-            b_vec = A.T @ W @ b
-
-        z, _ = cg(A_mat, b_vec, x0=z, maxiter=cg_max_iter, tol=cg_tol)
+        z, flag = cg(A_mat, b_vec, x0=z, M=D, maxiter=cg_max_iter, tol=cg_tol)
+        del A_mat, b_vec, wu, wv
 
         # update weights
-        wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
-        wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
-        W = diags(cp.concatenate((wu, 1-wu, wv, 1-wv)))
+        wu = sigmoid((A2.dot(z)) ** 2 - (A1.dot(z)) ** 2, k)  # top
+        wv = sigmoid((A4.dot(z)) ** 2 - (A3.dot(z)) ** 2, k)  # right
 
         energy_old = energy
-        energy = (A @ z - b).T @ W @ (A @ z - b)
+        energy = cp.sum(wu * (A1.dot(z) + nx) ** 2) + \
+                 cp.sum((1 - wu) * (A2.dot(z) + nx) ** 2) + \
+                 cp.sum(wv * (A3.dot(z) + ny) ** 2) + \
+                 cp.sum((1 - wv) * (A4.dot(z) + ny) ** 2)
+
         energy_list.append(energy)
         relative_energy = cp.abs(energy - energy_old) / energy_old
         pbar.set_description(
-            f"step {i+1}/{max_iter} energy: {energy:.3f} relative energy: {relative_energy:.3e}")
+            f"step {i + 1}/{max_iter} flag:{flag} energy: {energy:.3e}"
+            f" relative energy: {relative_energy:.3e}")
         if relative_energy < tol:
             break
+    del A1, A2, A3, A4, nx, ny
     toc = time.time()
 
-    print(f"Total time: {toc - tic}")
+    print(f"Total time: {toc - tic:.3e} sec")
     depth_map = cp.ones_like(normal_mask, float) * cp.nan
     depth_map[normal_mask] = z
 
@@ -286,7 +356,7 @@ def bilateral_normal_integration(normal_map,
         vertices = cp.asnumpy(map_depth_map_to_point_clouds(depth_map, normal_mask, K=None, step_size=step_size))
 
     facets = cp.asnumpy(construct_facets_from(normal_mask))
-    if normal_map[:, :, -1].mean() < 0:
+    if nz.mean() > 0:
         facets = facets[:, [0, 1, 4, 3, 2]]
     surface = pv.PolyData(vertices, facets)
 
@@ -322,8 +392,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--path', type=dir_path)
     parser.add_argument('-k', type=float, default=2)
-    parser.add_argument('-i', '--iter', type=np.uint, default=100)
-    parser.add_argument('-t', '--tol', type=float, default=1e-5)
+    parser.add_argument('-i', '--iter', type=int, default=150)
+    parser.add_argument('-t', '--tol', type=float, default=1e-4)
+    parser.add_argument('--cgiter', type=int, default=5000)
+    parser.add_argument('--cgtol', type=float, default=1e-3)
     arg = parser.parse_args()
 
     normal_map = cv2.cvtColor(cv2.imread(os.path.join(
@@ -343,14 +415,18 @@ if __name__ == '__main__':
                                                                                        k=arg.k,
                                                                                        K=K,
                                                                                        max_iter=arg.iter,
-                                                                                       tol=arg.tol)
+                                                                                       tol=arg.tol,
+                                                                                       cg_max_iter=arg.cgiter,
+                                                                                       cg_tol=arg.cgtol)
     else:
         depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map=normal_map,
                                                                                        normal_mask=mask,
                                                                                        k=arg.k,
                                                                                        K=None,
                                                                                        max_iter=arg.iter,
-                                                                                       tol=arg.tol)
+                                                                                       tol=arg.tol,
+                                                                                       cg_max_iter=arg.cgiter,
+                                                                                       cg_tol=arg.cgtol)
 
     # save the resultant polygon mesh and discontinuity maps.
     cp.save(os.path.join(arg.path, "energy"), cp.array(energy_list))
