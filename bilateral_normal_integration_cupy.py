@@ -405,8 +405,10 @@ if __name__ == '__main__':
     else:
         normal_map = normal_map/255 * 2 - 1
 
-    mask = cv2.imread(os.path.join(arg.path, "mask.png"),
-                      cv2.IMREAD_GRAYSCALE).astype(bool)
+    try:
+        mask = cv2.imread(os.path.join(arg.path, "mask.png"), cv2.IMREAD_GRAYSCALE).astype(bool)
+    except:
+        mask = np.ones(normal_map.shape[:2], bool)
 
     if os.path.exists(os.path.join(arg.path, "K.txt")):
         K = np.loadtxt(os.path.join(arg.path, "K.txt"))

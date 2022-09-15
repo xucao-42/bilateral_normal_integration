@@ -9,7 +9,8 @@ We propose a variational approach for **discontinuity preserving** surface recon
 Our method can handle both orthographic and perspective projection, is robust to outliers, and only has one hyperparameter in the objective function.
 
 ## Update
-**2022-08-09**: A CuPy version written by [Yuliang Xiu](https://xiuyuliang.cn) is available now. It can run on NVIDIA graphics cards and is much more efficient especially when the normal map's dimension becomes huge. The usage is the same as the numpy version.
+**2022-08-20**: I further improved the CuPy version's efficiency but sacrificed the code's readability. Read the NumPy version if you want to understand the details.
+**2022-08-09**: A CuPy version written by [Yuliang Xiu](https://xiuyuliang.cn) is available now. It can run on NVIDIA graphics cards and is much more efficient especially when the normal map's dimension becomes huge. The usage is the same as the NumPy version.
 
 ## Reconstruction results
 ### Toy normal maps
@@ -105,7 +106,7 @@ Put the following in the same folder, and pass the folder path to the script, as
 
 - `"normal_map.png"`: The RGB color-coded normal map. Check main paper's Fig. 1(a) for the coordinate system. 
 We recommend saving the normal maps as 16-bit images to reduce the discretization error.
-- `"mask.png"`: The integration domain should be white (1.0 or 255); the background should be black (0).
+- `"mask.png"`: The integration domain should be white (1.0 or 255); the background should be black (0). If no mask is provided, the integration domain is assumed to be the entire image.
 - `"K.txt"` (perspective case): the (3, 3) camera intrinsic matrix. We used `np.savetxt("K.txt", K)` to save the camera matrix into the txt file.
 
 Reading the normal map from an RGB image inevitably introduces discretization errors, e.g., 
