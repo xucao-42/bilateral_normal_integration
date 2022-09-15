@@ -10,6 +10,7 @@ Our method can handle both orthographic and perspective projection, is robust to
 
 ## Update
 **2022-08-20**: I further improved the CuPy version's efficiency but sacrificed the code's readability. Read the NumPy version if you want to understand the details.
+
 **2022-08-09**: A CuPy version written by [Yuliang Xiu](https://xiuyuliang.cn) is available now. It can run on NVIDIA graphics cards and is much more efficient especially when the normal map's dimension becomes huge. The usage is the same as the NumPy version.
 
 ## Reconstruction results
