@@ -9,7 +9,7 @@ We propose a variational approach for **discontinuity preserving** surface recon
 Our method can handle both orthographic and perspective projection, is robust to outliers, and only has one hyperparameter in the objective function.
 
 ## Update
-**2022-08-20**: I further improved the CuPy version's efficiency but sacrificed the code's readability. Read the NumPy version if you want to understand the details.
+**2022-08-20**: I further improved the CuPy version's efficiency but sacrificed the code's readability. Read the NumPy version first if you are interested in implementation details.
 
 **2022-08-09**: A CuPy version written by [Yuliang Xiu](https://xiuyuliang.cn) is available now. It can run on NVIDIA graphics cards and is much more efficient especially when the normal map's dimension becomes huge. The usage is the same as the NumPy version.
 
@@ -62,7 +62,8 @@ You can ensure the required packages are installed in your python environment by
 pip install -r requirements.txt
  ```
 
-If you want to use the CuPy version on GPU, following [the official guide](https://docs.cupy.dev/en/stable/install.html) to install CuPy.
+If you want to use the CuPy version on GPU, follow [the official guide](https://docs.cupy.dev/en/stable/install.html) to install CuPy.
+Cuda 11.3 and cupy-cuda11x are recommended according to [this issue](https://github.com/hoshino042/bilateral_normal_integration/issues/1).
 
 ## Reproduce our results 
 The `data` folder contains all surfaces we used in the paper.
@@ -121,7 +122,7 @@ The key hyperparameter here is the small `k`. It controls how easily the discont
 The larger `k` is, discontinuities are easier to be preserved.
 However, a very large `k` may introduce artifacts around discontinuities and over-segment the surface,
 while a tiny `k` can result in smooth surfaces.
-We recommend set `k=2` initially, and tune it depending on your results.
+We recommend set `k=2` initially (it should be fine in most cases), and tune it depending on your results.
 
 ## Depth normal fusion
 Our ECCV paper does not discribe how to use the information from a prior depth map if it is available.
