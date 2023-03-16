@@ -172,6 +172,8 @@ def bilateral_normal_integration(normal_map,
     # K = [[fx, 0,  cx],
     #      [0,  fy, cy],
     #      [0,  0,  1]]
+    # I forgot why I chose the awkward coordinate system after getting used to opencv convention :(
+    # but I won't touch the working code.
 
     num_normals = np.sum(normal_mask)
     projection = "orthographic" if K is None else "perspective"
@@ -183,9 +185,9 @@ def bilateral_normal_integration(normal_map,
     nz = - normal_map[normal_mask, 2]
 
     if K is not None:  # perspective
-        H, W = normal_mask.shape
+        img_height, img_width = normal_mask.shape[:2]
 
-        yy, xx = np.meshgrid(range(W), range(H))
+        yy, xx = np.meshgrid(range(img_width), range(img_height))
         xx = np.flip(xx, axis=0)
 
         cx = K[0, 2]
@@ -239,7 +241,7 @@ def bilateral_normal_integration(normal_map,
 
         D = spdiags(1/np.clip(A_mat.diagonal(), 1e-5, None), 0, num_normals, num_normals, format="csr")  # Jacob preconditioner
 
-        # ml = smoothed_aggregation_solver(A_mat, max_levels=4)  # AMG solver
+        # ml = smoothed_aggregation_solver(A_mat, max_levels=4)  # AMG preconditioner, not very stable but faster than Jacob preconditioner.
         # D = ml.aspreconditioner(cycle='W')
         z, _ = cg(A_mat, b_vec, x0=z, M=D, maxiter=cg_max_iter, tol=cg_tol)
 

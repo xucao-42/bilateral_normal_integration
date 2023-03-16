@@ -278,6 +278,10 @@ def bilateral_normal_integration(normal_map,
     pbar = tqdm(range(max_iter))
 
     for i in pbar:
+        # I am manually computing A_mat = A.T @ W @ A here. It saves 2/3 time compared to the simpliest way A.T @ W @ A.
+        # A.T @ W @ A can take more time than you think when the normal map become larger.
+        # The diaganol matrix W=diag([wu, 1-wu, wv, 1-wv]) needs not be explicited defined in this case.
+        # 
         data_term_top = wu[has_top_mask_flat] * nz_top_square
         data_term_bottom = (1 - wu[has_bottom_mask_flat]) * nz_bottom_square
         data_term_left = (1 - wv[has_left_mask_flat]) * nz_left_square
@@ -308,7 +312,8 @@ def bilateral_normal_integration(normal_map,
                                       shape=(num_normals, num_normals))
 
         A_mat_odu = A_mat_top_odu + A_mat_bottom_odu + A_mat_right_odu + A_mat_left_odu
-        A_mat = A_mat_d + A_mat_odu + A_mat_odu.T
+        A_mat = A_mat_d + A_mat_odu + A_mat_odu.T  # diganol + upper triangle + lower triangle matrix
+        ##########################################################################################################
 
         D = csr_matrix((1 / cp.clip(diagonal_data_term, 1e-5, None), pixel_idx_flat, pixel_idx_flat_indptr),
                        shape=(num_normals, num_normals))  # Jacobi preconditioner.
