@@ -1,12 +1,33 @@
-# [Bilateral Normal Integration](https://drive.google.com/file/d/17eB96Yr40wouCacoLMpQdfXgQ5PEDgkT/view?usp=sharing)
+<h2 align="center">Bilateral Normal Integration</h2>
+<h4 align="center">
+    <a href="https://xucao-42.github.io/homepage/"><strong>Xu Cao</strong></a>
+    ·
+    <a href="https://sites.google.com/view/hiroaki-santo/"><strong>Hiroaki Santo</strong></a>
+    ·
+    <a href="http://alumni.media.mit.edu/~shiboxin/"><strong>Boxin Shi</strong></a>
+    ·
+    <a href="http://cvl.ist.osaka-u.ac.jp/user/okura/"><strong>Fumio Okura</strong></a>
+    ·
+    <a href="http://www-infobiz.ist.osaka-u.ac.jp/en/member/matsushita/"><strong>Yasuyuki Matsushita</strong></a>
+</h3>
+<h4 align="center"><a href="https://eccv2022.ecva.net">ECCV 2022 </a></h3>
+<p align="center">
+  <br>
+    <a href="https://drive.google.com/file/d/17eB96Yr40wouCacoLMpQdfXgQ5PEDgkT/view?usp=sharing">
+      <img src='https://img.shields.io/badge/PDF-Paper-981E32?style=for-the-badge&Color=B31B1B' alt='PDF'>
+    </a>
 
-[Xu Cao](https://hoshino042.github.io/homepage/), [Hiroaki Santo](https://sites.google.com/view/hiroaki-santo/), [Boxin Shi](http://alumni.media.mit.edu/~shiboxin/), [Fumio Okura](http://cvl.ist.osaka-u.ac.jp/user/okura/) and [Yasuyuki Matsushita](http://www-infobiz.ist.osaka-u.ac.jp/en/member/matsushita/)
+[//]: # (    <a href='https://xucao-42.github.io/mvas_homepage/'>)
 
-ECCV 2022
-
+[//]: # (      <img src='https://img.shields.io/badge/MVAS-Project Page-5468FF?style=for-the-badge' alt='Project Page'></a>)
+</p>
+<div align="center">
 This is the official Python implementation of the ECCV 2022 work "Bilateral Normal Integration" (BiNI). 
-We propose a variational approach for **discontinuity preserving** surface reconstruction from a surface normal map.
-Our method can handle both orthographic and perspective projection, is robust to outliers, and only has one hyperparameter in the objective function.
+We propose a optimization-based approach for <strong>discontinuity preserving</strong> surface reconstruction from a surface normal map.
+Our method can handle both orthographic and perspective pinhole camera models, is robust to outliers, and easy-to-tune with one hyper-parameter.
+</div>
+
+
 
 ## Update
 **2022-08-20**: I further improved the CuPy version's efficiency but sacrificed the code's readability. Read the NumPy version first if you are interested in implementation details.
@@ -83,8 +104,7 @@ You can change the parameter settings by running, for example,
 ```
 python bilateral_normal_integration_numpy.py --path data/supp_vase -k 4 --iter 100 --tol 1e-5
 ```
-In our experiments, `tol` is consistently set as 1e-5.
-For `k` and `iter`, we used the following setups:
+<details><summary>Our setups for `k` and `iter`</summary>
 
 | surfaces                    | k   | iter |
 |-----------------------------|-----|------|
@@ -101,6 +121,7 @@ For `k` and `iter`, we used the following setups:
 | supp limitation2            | 4   | 100  |
 | supp limitation3            | 2   | 300  |
 
+</details>
 
 ## Run on your normal maps
 You can test our method using your normal maps.
@@ -149,11 +170,10 @@ Depth normal fusion also works in both orthographic and perspective cases.
 ## Citation
 If you find our work useful in your research, please consider citing:
 ```
-@inproceedings{xu2022bilateral,
+@inproceedings{bini2022cao,
   title={Bilateral Normal Integration},
   author={Cao, Xu and Santo, Hiroaki and Shi, Boxin and Okura, Fumio and Matsushita, Yasuyuki},
-  booktitle={European conference on computer vision (ECCV)},
-  pages={},
+  booktitle=ECCV,
   year={2022}
 }
 ```

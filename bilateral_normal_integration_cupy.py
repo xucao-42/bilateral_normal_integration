@@ -160,7 +160,7 @@ def bilateral_normal_integration(normal_map,
 
     :param normal_map: A normal map, which is an image where each pixel's color encodes the corresponding 3D surface normal.
     :param normal_mask: A binary mask that indicates the region of interest in the normal_map to be integrated.
-    :param k: A parameter that controls the toughness of the surface.
+    :param k: A parameter that controls the stiffness of the surface.
               The smaller the k value, the smoother the surface appears (fewer discontinuities).
               If set as 0, a smooth surface is obtained (No discontinuities), and the iteration should end at step 2 since the surface will not change with iterations.
 
