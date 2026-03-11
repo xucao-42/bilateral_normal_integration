@@ -10,6 +10,7 @@ from scipy.sparse.linalg import cg
 import numpy as np
 from tqdm.auto import tqdm
 import time
+import math
 import pyvista as pv
 import numba
 # from pyamg.aggregation import smoothed_aggregation_solver
@@ -121,7 +122,6 @@ def _spmatvec_inplace(data, indices, indptr, x, out):
 def _update_weights_energy(A1z, A2z, A3z, A4z, nx, ny, k, w_out):
     """Fused weight update + energy: writes w_out in-place, returns scalar energy.
     w_out layout: [wu, 1-wu, wv, 1-wv]. Residuals use b=(-nx,-nx,-ny,-ny)."""
-    import math
     n = len(A1z)
     energy = 0.0
     for i in range(n):
