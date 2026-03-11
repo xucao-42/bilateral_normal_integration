@@ -11,7 +11,67 @@ import numpy as np
 from tqdm.auto import tqdm
 import time
 import pyvista as pv
+import numba
 # from pyamg.aggregation import smoothed_aggregation_solver
+
+
+@numba.njit(cache=True)
+def _pcg_jacobi(data, indices, indptr, b, d_inv, x0, max_iter, tol):
+    """Jacobi-preconditioned CG, JIT-compiled to avoid Python loop overhead."""
+    n = len(b)
+    x = x0.copy()
+    # r = b - A @ x
+    r = b.copy()
+    for i in range(n):
+        s = 0.0
+        for j in range(indptr[i], indptr[i + 1]):
+            s += data[j] * x[indices[j]]
+        r[i] -= s
+    # z = D^{-1} r
+    z = d_inv * r
+    p = z.copy()
+    rz = 0.0
+    for i in range(n):
+        rz += r[i] * z[i]
+    b_norm_sq = 0.0
+    for i in range(n):
+        b_norm_sq += b[i] * b[i]
+    tol_sq = tol * tol * b_norm_sq
+
+    for _ in range(max_iter):
+        # Ap = A @ p
+        Ap = np.empty(n)
+        for i in range(n):
+            s = 0.0
+            for j in range(indptr[i], indptr[i + 1]):
+                s += data[j] * p[indices[j]]
+            Ap[i] = s
+        pAp = 0.0
+        for i in range(n):
+            pAp += p[i] * Ap[i]
+        if pAp == 0.0:
+            break
+        alpha = rz / pAp
+        for i in range(n):
+            x[i] += alpha * p[i]
+            r[i] -= alpha * Ap[i]
+        # convergence check
+        r_norm_sq = 0.0
+        for i in range(n):
+            r_norm_sq += r[i] * r[i]
+        if r_norm_sq <= tol_sq:
+            break
+        # z = D^{-1} r
+        for i in range(n):
+            z[i] = d_inv[i] * r[i]
+        rz_new = 0.0
+        for i in range(n):
+            rz_new += r[i] * z[i]
+        beta = rz_new / rz
+        for i in range(n):
+            p[i] = z[i] + beta * p[i]
+        rz = rz_new
+    return x
 
 
 # Define helper functions for moving masks in different directions
@@ -260,6 +320,11 @@ def bilateral_normal_integration(normal_map,
     z = np.zeros(np.sum(normal_mask))
     energy = np.dot(b**2, w)
 
+    # Warm up numba JIT (compiles on first tiny call; subsequent calls use cache)
+    _dummy = np.ones(2, dtype=np.float64)
+    _pcg_jacobi(np.array([1.0, 0.0, 0.0, 1.0]), np.array([0, 1, 0, 1]),
+                np.array([0, 2, 4]), _dummy, _dummy, _dummy, 1, 1e-3)
+
     tic = time.time()
 
     energy_list = []
@@ -283,11 +348,10 @@ def bilateral_normal_integration(normal_map,
             A_mat += lambda1 * M
             b_vec += lambda1 * M @ z_prior
 
-        D = spdiags(1/np.clip(A_mat.diagonal(), 1e-5, None), 0, num_normals, num_normals, format="csr")  # Jacob preconditioner
-
-        # ml = smoothed_aggregation_solver(A_mat, max_levels=4)  # AMG preconditioner, not very stable but faster than Jacob preconditioner.
-        # D = ml.aspreconditioner(cycle='W')
-        z, _ = cg(A_mat, b_vec, x0=z, M=D, maxiter=cg_max_iter, rtol=cg_tol)
+        d_inv = 1.0 / np.clip(A_mat.diagonal(), 1e-5, None)
+        A_csr = A_mat.tocsr()
+        z = _pcg_jacobi(A_csr.data, A_csr.indices, A_csr.indptr,
+                        b_vec, d_inv, z, cg_max_iter, cg_tol)
 
         # Update the weight matrices
         wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
