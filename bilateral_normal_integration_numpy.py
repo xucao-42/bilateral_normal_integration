@@ -418,6 +418,8 @@ def bilateral_normal_integration(normal_map,
     _b_vec = np.empty(num_normals)
     del A_csr_local, _Ck, _Cl, _Cv, _rows_k, _A_mat_ref_indices32, _A_mat_ref_indptr32
 
+    _has_depth_prior = depth_map is not None
+
     # Initialize variables for the optimization process
     w = 0.5 * np.ones(4*num_normals)
     z = np.zeros(np.sum(normal_mask))
@@ -489,6 +491,11 @@ def bilateral_normal_integration(normal_map,
     toc = time.time()
 
     print(f"Total time: {toc - tic:.3f} sec")
+
+    # Extract wu/wv from w for discontinuity map output (fast path stores them in w)
+    if not _has_depth_prior:
+        wu = w[:num_normals]
+        wv = w[2 * num_normals:3 * num_normals]
 
     # Reconstruct the depth map and surface
     depth_map = np.ones_like(normal_mask, float) * np.nan
