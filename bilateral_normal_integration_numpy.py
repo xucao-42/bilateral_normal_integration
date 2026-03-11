@@ -15,6 +15,40 @@ import numba
 # from pyamg.aggregation import smoothed_aggregation_solver
 
 
+@numba.njit(cache=True)
+def _build_C_coo(A_data, A_indices, A_indptr, Amat_indices, Amat_indptr, n_A_rows):
+    """Precompute COO arrays for C: A_mat.data = C @ w (avoids sparse matmul each IRLS iter).
+    C[k, l] = A[l, row_k] * A[l, col_k] where (row_k, col_k) is the k-th nonzero of A_mat."""
+    max_entries = n_A_rows * 4
+    C_k = np.empty(max_entries, dtype=np.int64)
+    C_l = np.empty(max_entries, dtype=np.int64)
+    C_v = np.empty(max_entries, dtype=np.float64)
+    cnt = 0
+    for l in range(n_A_rows):
+        sl, el = A_indptr[l], A_indptr[l + 1]
+        if el <= sl:
+            continue
+        for ii in range(sl, el):
+            c_i = A_indices[ii]
+            v_i = A_data[ii]
+            for jj in range(sl, el):
+                c_j = A_indices[jj]
+                v_j = A_data[jj]
+                lo = Amat_indptr[c_i]
+                hi = Amat_indptr[c_i + 1]
+                while lo < hi:
+                    mid = (lo + hi) // 2
+                    if Amat_indices[mid] < c_j:
+                        lo = mid + 1
+                    else:
+                        hi = mid
+                C_k[cnt] = lo
+                C_l[cnt] = l
+                C_v[cnt] = v_i * v_j
+                cnt += 1
+    return C_k[:cnt], C_l[:cnt], C_v[:cnt]
+
+
 @numba.njit(cache=True, fastmath=True)
 def _pcg_jacobi(data, indices, indptr, b, d_inv, x0, max_iter, tol):
     """Jacobi-preconditioned CG, JIT-compiled to avoid Python loop overhead.
@@ -314,6 +348,28 @@ def bilateral_normal_integration(normal_map,
     # Precompute A transpose once (used every iteration)
     AT = A.T.tocsr()
 
+    # Precompute in-place A_mat update: C s.t. A_mat.data = C @ w (avoids sparse matmul each iter)
+    A_csr_local = A.tocsr()
+    _A_mat_ref = (AT @ A).tocsr()
+    _A_mat_ref.sort_indices()
+    _A_mat_ref_indices32 = _A_mat_ref.indices.astype(np.int32)
+    _A_mat_ref_indptr32 = _A_mat_ref.indptr.astype(np.int32)
+    _build_C_coo(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64),
+                 np.array([0, 1, 0, 1], dtype=np.int32),
+                 np.array([0, 2, 4], dtype=np.int32),
+                 np.array([0, 1], dtype=np.int32),
+                 np.array([0, 1, 2], dtype=np.int32), 2)
+    _Ck, _Cl, _Cv = _build_C_coo(
+        A_csr_local.data, A_csr_local.indices.astype(np.int32),
+        A_csr_local.indptr.astype(np.int32),
+        _A_mat_ref_indices32, _A_mat_ref_indptr32, 4 * num_normals)
+    _C = csr_matrix((_Cv, (_Ck, _Cl)), shape=(_A_mat_ref.nnz, 4 * num_normals))
+    _rows_k = np.repeat(np.arange(num_normals, dtype=np.int32), np.diff(_A_mat_ref.indptr))
+    _diag_pos = np.flatnonzero(_rows_k == _A_mat_ref.indices)
+    _AT_b = AT.copy()
+    _AT_b.data = _AT_b.data * b[_AT_b.indices]
+    del A_csr_local, _Ck, _Cl, _Cv, _rows_k, _A_mat_ref_indices32, _A_mat_ref_indptr32
+
     # Initialize variables for the optimization process
     w = 0.5 * np.ones(4*num_normals)
     z = np.zeros(np.sum(normal_mask))
@@ -339,20 +395,26 @@ def bilateral_normal_integration(normal_map,
     # Optimization loop
     for i in pbar:
         # fix weights and solve for depths
-        A_mat = AT @ A.multiply(w[:, np.newaxis])
-        b_vec = AT @ (w * b)
-        if depth_map is not None:
+        if depth_map is None:
+            # Fast path: in-place update avoids sparse matmul each iteration
+            _A_mat_ref.data[:] = _C.dot(w)
+            b_vec = _AT_b.dot(w)
+            d_inv = 1.0 / np.clip(_A_mat_ref.data[_diag_pos], 1e-5, None)
+            z = _pcg_jacobi(_A_mat_ref.data, _A_mat_ref.indices, _A_mat_ref.indptr,
+                            b_vec, d_inv, z, cg_max_iter, cg_tol)
+        else:
+            A_mat = AT @ A.multiply(w[:, np.newaxis])
+            b_vec = AT @ (w * b)
             depth_diff = M @ (z_prior - z)
             depth_diff[depth_diff==0] = np.nan
             offset = np.nanmean(depth_diff)
             z = z + offset
             A_mat += lambda1 * M
             b_vec += lambda1 * M @ z_prior
-
-        d_inv = 1.0 / np.clip(A_mat.diagonal(), 1e-5, None)
-        A_csr = A_mat.tocsr()
-        z = _pcg_jacobi(A_csr.data, A_csr.indices, A_csr.indptr,
-                        b_vec, d_inv, z, cg_max_iter, cg_tol)
+            d_inv = 1.0 / np.clip(A_mat.diagonal(), 1e-5, None)
+            A_csr = A_mat.tocsr()
+            z = _pcg_jacobi(A_csr.data, A_csr.indices, A_csr.indptr,
+                            b_vec, d_inv, z, cg_max_iter, cg_tol)
 
         # Update the weight matrices
         wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
