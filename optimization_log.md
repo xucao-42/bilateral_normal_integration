@@ -51,15 +51,34 @@ MADE = Mean Absolute Depth Error (mm, lower is better).
 ---
 
 ## Mod 2: ILU preconditioner
-**Status:** PENDING
+**Status:** DISCARDED ❌ — slower, killed manually
+**Result:** Run never completed. `spilu` decomposition (~O(n·fill_factor)) is called every IRLS iteration, overhead exceeds any CG iteration savings.
 
 **Changes:**
-- Replace Jacobi preconditioner (`spdiags(1/diag, ...)`) with incomplete LU (`spilu`)
+- Replace Jacobi preconditioner (`spdiags(1/diag, ...)`) with incomplete LU (`spilu`, fill_factor=2)
+
+**Lesson:** ILU is only worth it if factorization cost is amortized across many CG steps, but here A_mat changes every IRLS iteration so it must be rebuilt each time.
 
 ---
 
 ## Mod 3: Direct solver (spsolve) for first iteration
-**Status:** PENDING
+**Status:** DISCARDED ❌ — slower overall
+**Result:** Total 72.62s vs Mod 1's 37.35s — **worse**. harvest: 11.68→30.38s, pot1: 4.89→23.97s.
 
 **Changes:**
-- Use `spsolve` for the first IRLS iteration (cold start), then CG for subsequent iterations
+- Use `spsolve` (SuperLU direct factorization) for iteration 0, CG+Jacobi for subsequent
+
+| Object  | Time (s) | MADE (mm) | Δ vs Mod1 |
+|---------|----------|-----------|-----------|
+| bear    | 1.66     | 0.283     | -0.74     |
+| buddha  | 5.85     | 1.093     | -0.46     |
+| cat     | 2.19     | 0.074     | -0.37     |
+| cow     | 1.31     | 0.058     | -0.29     |
+| goblet  | 2.13     | 9.013     | -0.49     |
+| harvest | 30.38    | 1.851     | +18.70    |
+| pot1    | 23.97    | 0.635     | +19.08    |
+| pot2    | 2.29     | 0.220     | -0.29     |
+| reading | 2.84     | 0.257     | +0.13     |
+| **Total** | **72.62** | — | **+35.27** |
+
+**Lesson:** For the cold-start (uniform-weight) system, the Laplacian-like A_mat = 0.5·A.T@A is smooth and CG+Jacobi converges quickly from z=0. SuperLU overhead (O(n^1.5)) dominates for large problems (harvest: n=56k, pot1: n=57k). spsolve is only competitive when n is small.
