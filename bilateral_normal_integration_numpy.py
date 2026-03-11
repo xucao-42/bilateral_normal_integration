@@ -17,55 +17,54 @@ import numba
 
 @numba.njit(cache=True)
 def _pcg_jacobi(data, indices, indptr, b, d_inv, x0, max_iter, tol):
-    """Jacobi-preconditioned CG, JIT-compiled to avoid Python loop overhead."""
+    """Jacobi-preconditioned CG, JIT-compiled to avoid Python loop overhead.
+    Pre-allocates all buffers; avoids malloc per CG iteration."""
     n = len(b)
     x = x0.copy()
+    r = np.empty(n)
+    z = np.empty(n)
+    p = np.empty(n)
+    Ap = np.empty(n)
+
     # r = b - A @ x
-    r = b.copy()
     for i in range(n):
         s = 0.0
         for j in range(indptr[i], indptr[i + 1]):
             s += data[j] * x[indices[j]]
-        r[i] -= s
-    # z = D^{-1} r
-    z = d_inv * r
-    p = z.copy()
+        r[i] = b[i] - s
+
+    # z = D^{-1} r, p = z, rz = r·z, tol check
+    b_norm_sq = 0.0
     rz = 0.0
     for i in range(n):
-        rz += r[i] * z[i]
-    b_norm_sq = 0.0
-    for i in range(n):
         b_norm_sq += b[i] * b[i]
+        z[i] = d_inv[i] * r[i]
+        p[i] = z[i]
+        rz += r[i] * z[i]
     tol_sq = tol * tol * b_norm_sq
 
     for _ in range(max_iter):
         # Ap = A @ p
-        Ap = np.empty(n)
+        pAp = 0.0
         for i in range(n):
             s = 0.0
             for j in range(indptr[i], indptr[i + 1]):
                 s += data[j] * p[indices[j]]
             Ap[i] = s
-        pAp = 0.0
-        for i in range(n):
-            pAp += p[i] * Ap[i]
+            pAp += p[i] * s
         if pAp == 0.0:
             break
         alpha = rz / pAp
+        r_norm_sq = 0.0
         for i in range(n):
             x[i] += alpha * p[i]
             r[i] -= alpha * Ap[i]
-        # convergence check
-        r_norm_sq = 0.0
-        for i in range(n):
             r_norm_sq += r[i] * r[i]
         if r_norm_sq <= tol_sq:
             break
-        # z = D^{-1} r
-        for i in range(n):
-            z[i] = d_inv[i] * r[i]
         rz_new = 0.0
         for i in range(n):
+            z[i] = d_inv[i] * r[i]
             rz_new += r[i] * z[i]
         beta = rz_new / rz
         for i in range(n):
@@ -320,10 +319,12 @@ def bilateral_normal_integration(normal_map,
     z = np.zeros(np.sum(normal_mask))
     energy = np.dot(b**2, w)
 
-    # Warm up numba JIT (compiles on first tiny call; subsequent calls use cache)
+    # Warm up numba JIT using int32 indices to match actual CSR format
     _dummy = np.ones(2, dtype=np.float64)
-    _pcg_jacobi(np.array([1.0, 0.0, 0.0, 1.0]), np.array([0, 1, 0, 1]),
-                np.array([0, 2, 4]), _dummy, _dummy, _dummy, 1, 1e-3)
+    _pcg_jacobi(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64),
+                np.array([0, 1, 0, 1], dtype=np.int32),
+                np.array([0, 2, 4], dtype=np.int32),
+                _dummy, _dummy, _dummy, 1, 1e-3)
 
     tic = time.time()
 
