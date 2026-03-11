@@ -3,6 +3,7 @@ from scipy.io import loadmat
 import numpy as np
 import cv2
 import os
+import time
 
 obj_list = ["bear", "buddha", "cat", "cow", "goblet", "harvest", "pot1", "pot2", "reading"]
 data_dir = "data/Fig7_diligent"
@@ -29,12 +30,15 @@ for obj_name in obj_list:
 
 
     K =np.loadtxt(K_path)
+    t0 = time.time()
     depth_map_est, surface, *_ = bilateral_normal_integration(normal_map=normal_map,
                                                        normal_mask=mask,
                                                        k=k,
                                                        K=K,
                                                        max_iter=100,
                                                        tol=1e-4)
+    elapsed = time.time() - t0
+    print(f"{obj_name} wall time: {elapsed:.2f} sec")
 
     depth_gt = loadmat(depth_gt_path)["depth_gt"]
 

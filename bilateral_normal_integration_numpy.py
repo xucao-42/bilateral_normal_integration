@@ -252,10 +252,13 @@ def bilateral_normal_integration(normal_map,
     A = vstack((A1, A2, A3, A4))
     b = np.concatenate((-nx, -nx, -ny, -ny))
 
+    # Precompute A transpose once (used every iteration)
+    AT = A.T.tocsr()
+
     # Initialize variables for the optimization process
-    W = spdiags(0.5 * np.ones(4*num_normals), 0, 4*num_normals, 4*num_normals, format="csr")
+    w = 0.5 * np.ones(4*num_normals)
     z = np.zeros(np.sum(normal_mask))
-    energy = (A @ z - b).T @ W @ (A @ z - b)
+    energy = np.dot(b**2, w)
 
     tic = time.time()
 
@@ -270,8 +273,8 @@ def bilateral_normal_integration(normal_map,
     # Optimization loop
     for i in pbar:
         # fix weights and solve for depths
-        A_mat = A.T @ W @ A
-        b_vec = A.T @ W @ b
+        A_mat = AT @ A.multiply(w[:, np.newaxis])
+        b_vec = AT @ (w * b)
         if depth_map is not None:
             depth_diff = M @ (z_prior - z)
             depth_diff[depth_diff==0] = np.nan
@@ -284,16 +287,17 @@ def bilateral_normal_integration(normal_map,
 
         # ml = smoothed_aggregation_solver(A_mat, max_levels=4)  # AMG preconditioner, not very stable but faster than Jacob preconditioner.
         # D = ml.aspreconditioner(cycle='W')
-        z, _ = cg(A_mat, b_vec, x0=z, M=D, maxiter=cg_max_iter, tol=cg_tol)
+        z, _ = cg(A_mat, b_vec, x0=z, M=D, maxiter=cg_max_iter, rtol=cg_tol)
 
         # Update the weight matrices
         wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
         wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
-        W = spdiags(np.concatenate((wu, 1-wu, wv, 1-wv)), 0, 4*num_normals, 4*num_normals, format="csr")
+        w = np.concatenate((wu, 1-wu, wv, 1-wv))
 
         # Check for convergence
         energy_old = energy
-        energy = (A @ z - b).T @ W @ (A @ z - b)
+        r = A @ z - b
+        energy = np.dot(r**2, w)
         energy_list.append(energy)
         relative_energy = np.abs(energy - energy_old) / energy_old
         pbar.set_description(
