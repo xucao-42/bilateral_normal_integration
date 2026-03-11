@@ -522,6 +522,21 @@ def bilateral_normal_integration(normal_map,
     return depth_map, surface, wu_map, wv_map, energy_list
 
 
+# Pre-load numba JIT functions from cache at module import time.
+# Without this, the first object processed pays the cache-load penalty (~0.15s).
+_wup = np.ones(2, dtype=np.float64)
+_wup_i32 = np.array([0, 1, 0, 1], dtype=np.int32)
+_wup_ip32 = np.array([0, 2, 4], dtype=np.int32)
+_build_C_coo(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64), _wup_i32, _wup_ip32,
+             np.array([0, 1], dtype=np.int32), np.array([0, 1, 2], dtype=np.int32), 2)
+_pcg_jacobi(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64), _wup_i32, _wup_ip32,
+            _wup, _wup, _wup, 1, 1e-3)
+_spmatvec_inplace(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64), _wup_i32, _wup_ip32,
+                  _wup, _wup)
+_update_weights_energy(_wup, _wup, _wup, _wup, _wup, _wup, 2.0, np.zeros(8))
+del _wup, _wup_i32, _wup_ip32
+
+
 if __name__ == '__main__':
     import cv2
     import argparse, os
