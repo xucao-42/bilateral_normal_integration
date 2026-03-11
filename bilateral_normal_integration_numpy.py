@@ -107,6 +107,49 @@ def _pcg_jacobi(data, indices, indptr, b, d_inv, x0, max_iter, tol):
     return x
 
 
+@numba.njit(cache=True, fastmath=True)
+def _spmatvec_inplace(data, indices, indptr, x, out):
+    """Compute out[:] = sparse_matrix @ x in-place (no allocation)."""
+    for i in range(len(out)):
+        s = 0.0
+        for j in range(indptr[i], indptr[i + 1]):
+            s += data[j] * x[indices[j]]
+        out[i] = s
+
+
+@numba.njit(cache=True)
+def _update_weights_energy(A1z, A2z, A3z, A4z, nx, ny, k, w_out):
+    """Fused weight update + energy: writes w_out in-place, returns scalar energy.
+    w_out layout: [wu, 1-wu, wv, 1-wv]. Residuals use b=(-nx,-nx,-ny,-ny)."""
+    import math
+    n = len(A1z)
+    energy = 0.0
+    for i in range(n):
+        d_u = A2z[i] * A2z[i] - A1z[i] * A1z[i]
+        d_v = A4z[i] * A4z[i] - A3z[i] * A3z[i]
+        # Numerically stable sigmoid (avoids exp overflow)
+        if d_u >= 0.0:
+            wu_i = 1.0 / (1.0 + math.exp(-k * d_u))
+        else:
+            e = math.exp(k * d_u)
+            wu_i = e / (1.0 + e)
+        if d_v >= 0.0:
+            wv_i = 1.0 / (1.0 + math.exp(-k * d_v))
+        else:
+            e = math.exp(k * d_v)
+            wv_i = e / (1.0 + e)
+        w_out[i] = wu_i
+        w_out[n + i] = 1.0 - wu_i
+        w_out[2 * n + i] = wv_i
+        w_out[3 * n + i] = 1.0 - wv_i
+        r1 = A1z[i] + nx[i]
+        r2 = A2z[i] + nx[i]
+        r3 = A3z[i] + ny[i]
+        r4 = A4z[i] + ny[i]
+        energy += r1*r1*wu_i + r2*r2*(1.0-wu_i) + r3*r3*wv_i + r4*r4*(1.0-wv_i)
+    return energy
+
+
 # Define helper functions for moving masks in different directions
 def move_left(mask): return np.pad(mask,((0,0),(0,1)),'constant',constant_values=0)[:,1:]  # Shift the input mask array to the left by 1, filling the right edge with zeros.
 def move_right(mask): return np.pad(mask,((0,0),(1,0)),'constant',constant_values=0)[:,:-1]  # Shift the input mask array to the right by 1, filling the left edge with zeros.
@@ -364,10 +407,15 @@ def bilateral_normal_integration(normal_map,
         A_csr_local.indptr.astype(np.int32),
         _A_mat_ref_indices32, _A_mat_ref_indptr32, 4 * num_normals)
     _C = csr_matrix((_Cv, (_Ck, _Cl)), shape=(_A_mat_ref.nnz, 4 * num_normals))
+    _C.indices = _C.indices.astype(np.int32)
+    _C.indptr = _C.indptr.astype(np.int32)
     _rows_k = np.repeat(np.arange(num_normals, dtype=np.int32), np.diff(_A_mat_ref.indptr))
     _diag_pos = np.flatnonzero(_rows_k == _A_mat_ref.indices)
     _AT_b = AT.copy()
     _AT_b.data = _AT_b.data * b[_AT_b.indices]
+    _AT_b.indices = _AT_b.indices.astype(np.int32)
+    _AT_b.indptr = _AT_b.indptr.astype(np.int32)
+    _b_vec = np.empty(num_normals)
     del A_csr_local, _Ck, _Cl, _Cv, _rows_k, _A_mat_ref_indices32, _A_mat_ref_indptr32
 
     # Initialize variables for the optimization process
@@ -381,6 +429,11 @@ def bilateral_normal_integration(normal_map,
                 np.array([0, 1, 0, 1], dtype=np.int32),
                 np.array([0, 2, 4], dtype=np.int32),
                 _dummy, _dummy, _dummy, 1, 1e-3)
+    _spmatvec_inplace(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64),
+                      np.array([0, 1, 0, 1], dtype=np.int32),
+                      np.array([0, 2, 4], dtype=np.int32),
+                      _dummy, _dummy)
+    _update_weights_energy(_dummy, _dummy, _dummy, _dummy, _dummy, _dummy, float(k), np.zeros(8))
 
     tic = time.time()
 
@@ -396,12 +449,15 @@ def bilateral_normal_integration(normal_map,
     for i in pbar:
         # fix weights and solve for depths
         if depth_map is None:
-            # Fast path: in-place update avoids sparse matmul each iteration
-            _A_mat_ref.data[:] = _C.dot(w)
-            b_vec = _AT_b.dot(w)
+            # Fast path: numba in-place SpMV + fused weight/energy kernel
+            _spmatvec_inplace(_C.data, _C.indices, _C.indptr, w, _A_mat_ref.data)
+            _spmatvec_inplace(_AT_b.data, _AT_b.indices, _AT_b.indptr, w, _b_vec)
             d_inv = 1.0 / np.clip(_A_mat_ref.data[_diag_pos], 1e-5, None)
             z = _pcg_jacobi(_A_mat_ref.data, _A_mat_ref.indices, _A_mat_ref.indptr,
-                            b_vec, d_inv, z, cg_max_iter, cg_tol)
+                            _b_vec, d_inv, z, cg_max_iter, cg_tol)
+            A1z = A1 @ z; A2z = A2 @ z; A3z = A3 @ z; A4z = A4 @ z
+            energy_old = energy
+            energy = _update_weights_energy(A1z, A2z, A3z, A4z, nx, ny, float(k), w)
         else:
             A_mat = AT @ A.multiply(w[:, np.newaxis])
             b_vec = AT @ (w * b)
@@ -415,19 +471,15 @@ def bilateral_normal_integration(normal_map,
             A_csr = A_mat.tocsr()
             z = _pcg_jacobi(A_csr.data, A_csr.indices, A_csr.indptr,
                             b_vec, d_inv, z, cg_max_iter, cg_tol)
-
-        # Update the weight matrices — cache A_i@z for reuse in energy check
-        A1z = A1 @ z; A2z = A2 @ z; A3z = A3 @ z; A4z = A4 @ z
-        wu = sigmoid(A2z ** 2 - A1z ** 2, k)
-        wv = sigmoid(A4z ** 2 - A3z ** 2, k)
-        w = np.concatenate((wu, 1-wu, wv, 1-wv))
-
-        # Check for convergence — reuse cached A_i@z, avoid redundant A@z SpMV
-        energy_old = energy
-        r1 = A1z - b[:num_normals];  r2 = A2z - b[num_normals:2*num_normals]
-        r3 = A3z - b[2*num_normals:3*num_normals]; r4 = A4z - b[3*num_normals:]
-        energy = (np.dot(r1 ** 2, wu) + np.dot(r2 ** 2, 1 - wu)
-                  + np.dot(r3 ** 2, wv) + np.dot(r4 ** 2, 1 - wv))
+            A1z = A1 @ z; A2z = A2 @ z; A3z = A3 @ z; A4z = A4 @ z
+            wu = sigmoid(A2z ** 2 - A1z ** 2, k)
+            wv = sigmoid(A4z ** 2 - A3z ** 2, k)
+            w = np.concatenate((wu, 1-wu, wv, 1-wv))
+            energy_old = energy
+            r1 = A1z - b[:num_normals];  r2 = A2z - b[num_normals:2*num_normals]
+            r3 = A3z - b[2*num_normals:3*num_normals]; r4 = A4z - b[3*num_normals:]
+            energy = (np.dot(r1 ** 2, wu) + np.dot(r2 ** 2, 1 - wu)
+                      + np.dot(r3 ** 2, wv) + np.dot(r4 ** 2, 1 - wv))
         energy_list.append(energy)
         relative_energy = np.abs(energy - energy_old) / energy_old
         pbar.set_description(
