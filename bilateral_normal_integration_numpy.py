@@ -416,15 +416,18 @@ def bilateral_normal_integration(normal_map,
             z = _pcg_jacobi(A_csr.data, A_csr.indices, A_csr.indptr,
                             b_vec, d_inv, z, cg_max_iter, cg_tol)
 
-        # Update the weight matrices
-        wu = sigmoid((A2 @ z) ** 2 - (A1 @ z) ** 2, k)
-        wv = sigmoid((A4 @ z) ** 2 - (A3 @ z) ** 2, k)
+        # Update the weight matrices — cache A_i@z for reuse in energy check
+        A1z = A1 @ z; A2z = A2 @ z; A3z = A3 @ z; A4z = A4 @ z
+        wu = sigmoid(A2z ** 2 - A1z ** 2, k)
+        wv = sigmoid(A4z ** 2 - A3z ** 2, k)
         w = np.concatenate((wu, 1-wu, wv, 1-wv))
 
-        # Check for convergence
+        # Check for convergence — reuse cached A_i@z, avoid redundant A@z SpMV
         energy_old = energy
-        r = A @ z - b
-        energy = np.dot(r**2, w)
+        r1 = A1z - b[:num_normals];  r2 = A2z - b[num_normals:2*num_normals]
+        r3 = A3z - b[2*num_normals:3*num_normals]; r4 = A4z - b[3*num_normals:]
+        energy = (np.dot(r1 ** 2, wu) + np.dot(r2 ** 2, 1 - wu)
+                  + np.dot(r3 ** 2, wv) + np.dot(r4 ** 2, 1 - wv))
         energy_list.append(energy)
         relative_energy = np.abs(energy - energy_old) / energy_old
         pbar.set_description(
