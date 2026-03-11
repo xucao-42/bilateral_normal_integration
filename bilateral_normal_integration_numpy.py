@@ -15,7 +15,7 @@ import numba
 # from pyamg.aggregation import smoothed_aggregation_solver
 
 
-@numba.njit(cache=True)
+@numba.njit(cache=True, fastmath=True)
 def _pcg_jacobi(data, indices, indptr, b, d_inv, x0, max_iter, tol):
     """Jacobi-preconditioned CG, JIT-compiled to avoid Python loop overhead.
     Pre-allocates all buffers; avoids malloc per CG iteration."""
