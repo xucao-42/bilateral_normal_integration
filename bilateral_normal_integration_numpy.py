@@ -6,15 +6,12 @@ __copyright__ = "Copyright (C) 2022 Xu Cao"
 __version__ = "2.0"
 
 from scipy.sparse import spdiags, csr_matrix, vstack
-from scipy.sparse.linalg import cg
 import numpy as np
 from tqdm.auto import tqdm
 import time
 import math
 import pyvista as pv
 import numba
-# from pyamg.aggregation import smoothed_aggregation_solver
-
 
 
 @numba.njit(cache=True)
@@ -147,14 +144,14 @@ def _update_weights_energy(A1z, A2z, A3z, A4z, nx, ny, k, w_out):
 
 
 # Define helper functions for moving masks in different directions
-def move_left(mask): return np.pad(mask,((0,0),(0,1)),'constant',constant_values=0)[:,1:]  # Shift the input mask array to the left by 1, filling the right edge with zeros.
-def move_right(mask): return np.pad(mask,((0,0),(1,0)),'constant',constant_values=0)[:,:-1]  # Shift the input mask array to the right by 1, filling the left edge with zeros.
-def move_top(mask): return np.pad(mask,((0,1),(0,0)),'constant',constant_values=0)[1:,:]  # Shift the input mask array up by 1, filling the bottom edge with zeros.
-def move_bottom(mask): return np.pad(mask,((1,0),(0,0)),'constant',constant_values=0)[:-1,:]  # Shift the input mask array down by 1, filling the top edge with zeros.
-def move_top_left(mask): return np.pad(mask,((0,1),(0,1)),'constant',constant_values=0)[1:,1:]  # Shift the input mask array up and to the left by 1, filling the bottom and right edges with zeros.
-def move_top_right(mask): return np.pad(mask,((0,1),(1,0)),'constant',constant_values=0)[1:,:-1]  # Shift the input mask array up and to the right by 1, filling the bottom and left edges with zeros.
-def move_bottom_left(mask): return np.pad(mask,((1,0),(0,1)),'constant',constant_values=0)[:-1,1:]  # Shift the input mask array down and to the left by 1, filling the top and right edges with zeros.
-def move_bottom_right(mask): return np.pad(mask,((1,0),(1,0)),'constant',constant_values=0)[:-1,:-1]  # Shift the input mask array down and to the right by 1, filling the top and left edges with zeros.
+def move_left(mask):         return np.pad(mask, ((0,0),(0,1)), constant_values=0)[:,1:]
+def move_right(mask):        return np.pad(mask, ((0,0),(1,0)), constant_values=0)[:,:-1]
+def move_top(mask):          return np.pad(mask, ((0,1),(0,0)), constant_values=0)[1:,:]
+def move_bottom(mask):       return np.pad(mask, ((1,0),(0,0)), constant_values=0)[:-1,:]
+def move_top_left(mask):     return np.pad(mask, ((0,1),(0,1)), constant_values=0)[1:,1:]
+def move_top_right(mask):    return np.pad(mask, ((0,1),(1,0)), constant_values=0)[1:,:-1]
+def move_bottom_left(mask):  return np.pad(mask, ((1,0),(0,1)), constant_values=0)[:-1,1:]
+def move_bottom_right(mask): return np.pad(mask, ((1,0),(1,0)), constant_values=0)[:-1,:-1]
 
 
 def generate_dx_dy(mask, nz_horizontal, nz_vertical, step_size=1):
@@ -371,10 +368,8 @@ def bilateral_normal_integration(normal_map,
 
         nz_u = uu * nx + vv * ny + fx * nz
         nz_v = uu * nx + vv * ny + fy * nz
-        del xx, yy, uu, vv
     else:  # orthographic
-        nz_u = nz.copy()
-        nz_v = nz.copy()
+        nz_u = nz_v = nz
 
     # get partial derivative matrices
     # right, left, top, bottom
@@ -410,21 +405,9 @@ def bilateral_normal_integration(normal_map,
     _has_depth_prior = depth_map is not None
 
     # Initialize variables for the optimization process
-    w = 0.5 * np.ones(4*num_normals)
-    z = np.zeros(np.sum(normal_mask))
-    energy = np.dot(b**2, w)
-
-    # Warm up numba JIT using int32 indices to match actual CSR format
-    _dummy = np.ones(2, dtype=np.float64)
-    _pcg_jacobi(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64),
-                np.array([0, 1, 0, 1], dtype=np.int32),
-                np.array([0, 2, 4], dtype=np.int32),
-                _dummy, _dummy, _dummy, 1, 1e-3)
-    _spmatvec_inplace(np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float64),
-                      np.array([0, 1, 0, 1], dtype=np.int32),
-                      np.array([0, 2, 4], dtype=np.int32),
-                      _dummy, _dummy)
-    _update_weights_energy(_dummy, _dummy, _dummy, _dummy, _dummy, _dummy, float(k), np.zeros(8))
+    w = 0.5 * np.ones(4 * num_normals)
+    z = np.zeros(num_normals)
+    energy = 0.5 * np.dot(b, b)
 
     tic = time.time()
 
@@ -487,7 +470,7 @@ def bilateral_normal_integration(normal_map,
         wv = w[2 * num_normals:3 * num_normals]
 
     # Reconstruct the depth map and surface
-    depth_map = np.ones_like(normal_mask, float) * np.nan
+    depth_map = np.full(normal_mask.shape, np.nan)
     depth_map[normal_mask] = z
 
     if K is not None:  # perspective
@@ -502,10 +485,10 @@ def bilateral_normal_integration(normal_map,
     surface = pv.PolyData(vertices, facets)
 
     # In the main paper, wu indicates the horizontal direction; wv indicates the vertical direction
-    wu_map = np.ones_like(normal_mask) * np.nan
+    wu_map = np.full(normal_mask.shape, np.nan)
     wu_map[normal_mask] = wv
 
-    wv_map = np.ones_like(normal_mask) * np.nan
+    wv_map = np.full(normal_mask.shape, np.nan)
     wv_map[normal_mask] = wu
 
     return depth_map, surface, wu_map, wv_map, energy_list
@@ -558,21 +541,11 @@ if __name__ == '__main__':
     except:
         mask = np.ones(normal_map.shape[:2], bool)
 
-    if os.path.exists(os.path.join(arg.path, "K.txt")):
-        K =np.loadtxt(os.path.join(arg.path, "K.txt"))
-        depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map=normal_map,
-                                                                                       normal_mask=mask,
-                                                                                       k=arg.k,
-                                                                                       K=K,
-                                                                                       max_iter=arg.iter,
-                                                                                       tol=arg.tol)
-    else:
-        depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(normal_map=normal_map,
-                                                                                       normal_mask=mask,
-                                                                                       k=arg.k,
-                                                                                       K=None,
-                                                                                       max_iter=arg.iter,
-                                                                                       tol=arg.tol)
+    K_path = os.path.join(arg.path, "K.txt")
+    K = np.loadtxt(K_path) if os.path.exists(K_path) else None
+    depth_map, surface, wu_map, wv_map, energy_list = bilateral_normal_integration(
+        normal_map=normal_map, normal_mask=mask, k=arg.k, K=K,
+        max_iter=arg.iter, tol=arg.tol)
 
     # save the resultant polygon mesh and discontinuity maps.
     np.save(os.path.join(arg.path, "energy"), np.array(energy_list))
