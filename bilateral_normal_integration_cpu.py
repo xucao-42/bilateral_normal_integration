@@ -238,25 +238,25 @@ def construct_facets_from(mask):
 
 
 def map_depth_map_to_point_clouds(depth_map, mask, K=None, step_size=1):
-    # y
-    # |  z
-    # | /
-    # |/
-    # o ---x
+    # OpenCV camera coordinates: x right, y down, z into scene
+    #      z
+    #     /
+    #    o --- x (right)
+    #    |
+    #    y (down)
     H, W = mask.shape
-    yy, xx = np.meshgrid(range(W), range(H))
-    xx = np.flip(xx, axis=0)
+    col, row = np.meshgrid(range(W), range(H))
 
     if K is None:
         vertices = np.zeros((H, W, 3))
-        vertices[..., 0] = xx * step_size
-        vertices[..., 1] = yy * step_size
+        vertices[..., 0] = col * step_size   # x = right (column)
+        vertices[..., 1] = row * step_size   # y = down (row)
         vertices[..., 2] = depth_map
         vertices = vertices[mask]
     else:
         u = np.zeros((H, W, 3))
-        u[..., 0] = xx
-        u[..., 1] = yy
+        u[..., 0] = col   # x direction = column
+        u[..., 1] = row   # y direction = row
         u[..., 2] = 1
         u = u[mask].T  # 3 x m
         vertices = (np.linalg.inv(K) @ u).T * depth_map[mask, np.newaxis]  # m x 3
@@ -321,59 +321,64 @@ def bilateral_normal_integration(normal_map,
              wv_map: A 2D image that represents the vertical smoothness weight for each pixel. (green for smooth, blue/red for discontinuities)
              energy_list: A list of energy values during the optimization process.
     """
-    # To avoid confusion, we list the coordinate systems in this code as follows
+    # Coordinate systems used in this code:
     #
-    # pixel coordinates         camera coordinates     normal coordinates (the main paper's Fig. 1 (a))
-    # u                          x                              y
-    # |                          |  z                           |
-    # |                          | /                            o -- x
-    # |                          |/                            /
-    # o --- v                    o --- y                      z
-    # (bottom left)
-    #                       (o is the optical center;
-    #                        xy-plane is parallel to the image plane;
-    #                        +z is the viewing direction.)
+    # normal coordinates (OpenGL, input)     camera coordinates (OpenCV, internal)
+    #        y                                      z
+    #        |                                     /
+    #        o -- x                               o --- x (right / column)
+    #       /                                     |
+    #      z (toward viewer)                      y (down / row)
     #
-    # The input normal map should be defined in the normal coordinates.
-    # The camera matrix K should be defined in the camera coordinates.
-    # K = [[fx, 0,  cx],
-    #      [0,  fy, cy],
-    #      [0,  0,  1]]
-    # I forgot why I chose the awkward coordinate system after getting used to opencv convention :(
-    # but I won't touch the working code.
+    # normal map channels: red=x (right), green=y (up), blue=z (toward viewer)
+    # camera convention: x right, y down, z into scene  (standard OpenCV)
+    #
+    # K matrix must be in standard OpenCV format:
+    #   K = [[fx,  0,  cx],        cx = principal point column (≈ W/2)
+    #        [ 0, fy,  cy],        cy = principal point row    (≈ H/2)
+    #        [ 0,  0,   1]]
 
     num_normals = np.sum(normal_mask)
     projection = "orthographic" if K is None else "perspective"
     print(f"Running bilateral normal integration with k={k} in the {projection} case. \n"
           f"The number of normal vectors is {num_normals}.")
-    # Transform the normal map from the normal coordinates to the camera coordinates
-    nx = normal_map[normal_mask, 1]
-    ny = normal_map[normal_mask, 0]
-    nz = - normal_map[normal_mask, 2]
+    # Extract normal components for the integration equations.
+    # The algorithm needs:
+    #   nx = normal component along the UP/vertical direction   = green channel (OpenGL y)
+    #   ny = normal component along the RIGHT/horizontal direction = red channel (OpenGL x)
+    #   nz = normal component into scene                        = −blue channel (OpenGL −z)
+    nx = normal_map[normal_mask, 1]    # green = up (vertical)
+    ny = normal_map[normal_mask, 0]    # red   = right (horizontal)
+    nz = -normal_map[normal_mask, 2]   # blue negated = into scene
 
     # Handle perspective and orthographic cases separately
     if K is not None:  # perspective
         img_height, img_width = normal_mask.shape[:2]
 
-        yy, xx = np.meshgrid(range(img_width), range(img_height))
-        xx = np.flip(xx, axis=0)
-
+        col, row = np.meshgrid(range(img_width), range(img_height))
+        # K is in standard OpenCV format:
+        #   K[0,0] = fx  (horizontal / column focal length)
+        #   K[1,1] = fy  (vertical / row focal length)
+        #   K[0,2] = cx  (principal point column ≈ W/2)
+        #   K[1,2] = cy  (principal point row    ≈ H/2)
         cx = K[0, 2]
         cy = K[1, 2]
         fx = K[0, 0]
         fy = K[1, 1]
 
-        uu = xx[normal_mask] - cx
-        vv = yy[normal_mask] - cy
+        # uu = signed distance from principal point in the UP direction (positive = above center)
+        # vv = signed distance from principal point in the RIGHT direction (positive = right of center)
+        uu = (cy - row)[normal_mask]   # vertical offset (cy − row: positive above center)
+        vv = (col - cx)[normal_mask]   # horizontal offset (col − cx: positive to the right)
 
-        nz_u = uu * nx + vv * ny + fx * nz
-        nz_v = uu * nx + vv * ny + fy * nz
+        nz_vertical   = uu * nx + vv * ny + fy * nz   # row differences use fy
+        nz_horizontal = uu * nx + vv * ny + fx * nz   # col differences use fx
     else:  # orthographic
-        nz_u = nz_v = nz
+        nz_vertical = nz_horizontal = nz
 
     # get partial derivative matrices
     # right, left, top, bottom
-    A3, A4, A1, A2 = generate_dx_dy(normal_mask, nz_horizontal=nz_v, nz_vertical=nz_u, step_size=step_size)
+    A3, A4, A1, A2 = generate_dx_dy(normal_mask, nz_horizontal=nz_horizontal, nz_vertical=nz_vertical, step_size=step_size)
 
     # Construct the linear system
     A = vstack((A1, A2, A3, A4))

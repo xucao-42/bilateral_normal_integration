@@ -30,6 +30,11 @@ Our method can handle both orthographic and perspective pinhole camera models, i
 
 
 ## Update
+
+**2026-03-11**: CPU solver performance optimized via an autonomous AI research loop inspired by [autoresearch](https://github.com/karpathy/autoresearch). An AI agent iteratively experimented with solver-level optimizations (Numba JIT PCG, fused kernels, precomputed sparsity structures, etc.), yielding a **6.4x speedup** (76.7s → 11.9s on the DiLiGenT benchmark) with zero MADE degradation. See [`adopted_improvements_en.md`](adopted_improvements_en.md) for the full experiment log. A CLI (`cli.py`) is also available now — for AI agents, see [`AGENTS.md`](AGENTS.md).
+- **Want to understand the algorithm?** Read [`bilateral_normal_integration_simple.py`](bilateral_normal_integration_simple.py) — a clean reference implementation optimized for clarity, not speed.
+- **Want to just run it?** Use the CLI: `python cli.py run data/Fig4_reading --json`
+
 **2023-11-07**: Code for evaluation on the DiLiGenT dataset is available now. See [this section](#evaluation-on-diligent-benchmark) for details.
 
 **2022-08-20**: I further improved the CuPy version's efficiency but sacrificed the code's readability. Read the NumPy version first if you are interested in implementation details.
@@ -94,17 +99,17 @@ Each normal map and its mask are put in a distinct folder.
 For the normal map in the perspective case, its folder contains an extra `K.txt` recording the 3x3 camera intrinsic matrix.
 Our code determines the perspective or orthographic case based on whether or not there is a `K.txt` in the normal map's folder.
 
-To obtain the integrated surface  of a specific normal map, pass the normal map's folder path to the script `bilateral_normal_integration_numpy.py`.
+To obtain the integrated surface of a specific normal map, pass the normal map's folder path to the script `bilateral_normal_integration_cpu.py`.
 For example, 
 ```
-python bilateral_normal_integration_numpy.py --path data/Fig4_reading
+python bilateral_normal_integration_cpu.py --path data/Fig4_reading
 ```
 This script will save the integrated surface and discontinuity maps in the same folder.
-The default parameter setting is `k=2` (the sigmoid function's sharpness), `iter=100` (the maximum iteration number of IRLS), 
-and `tol=1e-5` (the stopping tolerance of IRLS).
+The default parameter setting is `k=2` (the sigmoid function's sharpness), `iter=150` (the maximum iteration number of IRLS), 
+and `tol=1e-4` (the stopping tolerance of IRLS).
 You can change the parameter settings by running, for example, 
 ```
-python bilateral_normal_integration_numpy.py --path data/supp_vase -k 4 --iter 100 --tol 1e-5
+python bilateral_normal_integration_cpu.py --path data/supp_vase -k 4 --iter 100 --tol 1e-5
 ```
 <details><summary>Our setups for `k` and `iter`</summary>
 

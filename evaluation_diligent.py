@@ -1,4 +1,4 @@
-from bilateral_normal_integration_numpy import bilateral_normal_integration
+from bilateral_normal_integration_cpu import bilateral_normal_integration
 from scipy.io import loadmat
 import numpy as np
 import cv2

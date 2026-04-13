@@ -1,0 +1,17 @@
+commit	total_time_s	avg_made_mm	status	description
+d31f1d4	36.3	1.5041	keep	baseline (Mod 1: precompute AT + array ops for W)
+694bdcd	5.7	4.9897	discard	adaptive CG tol (0.1 early/1e-3 late) — MADE destroyed, sigmoid weights need accurate z
+87a6eda	36.8	2.4401	discard	AMG preconditioner — V-cycle not symmetric, CG gives wrong solutions, MADE degraded
+(none)	45.7	n/a	discard	SGS preconditioner — triangular solve overhead too high per CG step (4x slower)
+(none)	19.4	4.9897	discard	CHOLMOD direct solver (beta=1e-6) — exact solve changes IRLS trajectory, MADE wrong for 5 objects
+f8f7738	18.5	1.5036	keep	numba JIT PCG: eliminates Python loop overhead, pre-alloc buffers, int32 warmup fix
+346e417	31.0	1.5036	discard	parallel prange SpMV — thread launch overhead (~72us/call) exceeds benefit for n<60k
+f955186	n/a	n/a	discard	SGS preconditioner (numba) — compilation hangs 3+ min, NaN residual on harvest (diagonal bug)
+0baa1e0	20.5	1.5388	discard	IC(0) preconditioner (numba) — bear MADE +13.8% (factorization breakdown at discontinuities changes IRLS trajectory), harvest not faster
+da6bce9	22.1	1.5388	discard	SSOR preconditioner (numba) — same root cause as IC0: bear MADE +14.7%, faster convergence sends IRLS to wrong local min
+5956de6	15.2	1.5036	keep	fastmath=True on _pcg_jacobi — LLVM SIMD vectorization of AXPY/dot loops, 18% speedup, MADE unchanged
+a960c9b	13.5	1.5036	keep	precompute C matrix: A_mat.data=C@w replaces sparse matmul each iter, 11% speedup, MADE unchanged
+d888cf3	12.9	1.5036	keep	cache A_i@z in weight update, reuse for energy check — saves 4 SpMVs per IRLS iter, MADE unchanged
+be08a14	11.8	1.5036	keep	fused _update_weights_energy + _spmatvec_inplace numba kernels — eliminates allocs/dispatch, 8% speedup, MADE unchanged
+bc4a0d6	12.1	1.5036	keep	module-level numba JIT warmup — moves cache load to import time, saves ~0.5s wall time, MADE unchanged
+3f3ac93	11.9	1.5036	keep	_build_C_csr replaces _build_C_coo: direct CSR build, no COO intermediate — code simplification, negligible perf change, MADE unchanged
