@@ -131,10 +131,11 @@ python bilateral_normal_integration_cpu.py --path data/supp_vase -k 4 --iter 100
 </details>
 
 ## Evaluation on DiLiGenT benchmark
-To reproduce the quantitative evaluation  in Fig. 7 of our paper, first download the [GT depth maps](https://www.dropbox.com/scl/fi/uhg8538lr43h2g2arim2l/diligent_depth_GT.zip?rlkey=4qdmse25e0lmrtbo9bsfvifk1&dl=0) and extract it in the root directory, then run the following script:
+To reproduce the quantitative evaluation in Fig. 7 of our paper, simply run:
 ```
 python evaluation_diligent.py
 ```
+The ground-truth depth maps (`depth_gt.npz`, one per object) are bundled under each `data/Fig7_diligent/<object>/` folder, so no extra download is needed.
 This script reports the MADEs for DiLiGenT objects.
 The results are slightly better than in the paper for some objects because there may be some implementation improvements since we report the metrics in the paper.
 

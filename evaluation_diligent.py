@@ -1,5 +1,4 @@
 from bilateral_normal_integration_cpu import bilateral_normal_integration
-from scipy.io import loadmat
 import numpy as np
 import cv2
 import os
@@ -15,7 +14,7 @@ for obj_name in obj_list:
     normal_path = os.path.join(data_dir, obj_name, "normal_map.png")
     mask_path = os.path.join(data_dir, obj_name, "mask.png")
     K_path  = os.path.join(data_dir, obj_name, "K.txt")
-    depth_gt_path = os.path.join("diligent_depth_GT", f"{obj_name}_gt.mat")
+    depth_gt_path = os.path.join(data_dir, obj_name, "depth_gt.npz")
 
     normal_map = cv2.cvtColor(cv2.imread(normal_path, cv2.IMREAD_UNCHANGED), cv2.COLOR_RGB2BGR)
     if normal_map.dtype is np.dtype(np.uint16):
@@ -40,7 +39,7 @@ for obj_name in obj_list:
     elapsed = time.time() - t0
     print(f"{obj_name} wall time: {elapsed:.2f} sec")
 
-    depth_gt = loadmat(depth_gt_path)["depth_gt"]
+    depth_gt = np.load(depth_gt_path)["depth_gt"].astype(np.float64)
 
     scale = np.nanmedian(depth_gt / depth_map_est)
     scaled_depth = depth_map_est * scale
